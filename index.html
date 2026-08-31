@@ -1,0 +1,1625 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>下一条鱼会更大 🎣</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+    font-family:'Microsoft YaHei',sans-serif;
+    background:#0a1628;
+    min-height:100vh;
+    overflow:hidden;
+    user-select:none;
+    -webkit-user-select:none;
+}
+.game-container{
+    width:100vw;
+    height:100vh;
+    position:relative;
+    overflow:hidden;
+}
+
+/* 画布 */
+#gameCanvas{
+    width:100%;
+    height:100%;
+    display:block;
+}
+
+/* ===== 游戏顶栏 (钓鱼模式) ===== */
+.game-topbar{
+    position:fixed;
+    top:0;left:0;right:0;
+    height:44px;
+    padding:0 10px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    pointer-events:none;
+    z-index:100;
+    background:linear-gradient(180deg,rgba(8,12,25,0.92) 0%,rgba(10,16,32,0.75) 50%,rgba(12,18,36,0) 100%);
+}
+.game-topbar>.gtb-left{display:flex;align-items:center;gap:8px;pointer-events:auto;flex-shrink:0}
+.game-topbar>.gtb-right{display:flex;align-items:center;gap:6px;pointer-events:auto;flex-shrink:0;margin-left:auto}
+/* 返回按钮 */
+.gtb-btn-back{
+    display:none;align-items:center;justify-content:center;
+    width:30px;height:30px;border-radius:7px;
+    background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);
+    color:rgba(255,255,255,0.8);font-size:0.85em;cursor:pointer;
+    transition:all 0.2s;flex-shrink:0;
+}
+.gtb-btn-back.show{display:flex!important}
+.gtb-btn-back:hover{background:rgba(255,255,255,0.18);color:#fff}
+/* 模式标题 */
+.gtb-title{
+    font-size:0.78em;font-weight:600;
+    color:rgba(255,255,255,0.55);
+    text-shadow:0 0 6px rgba(0,0,0,0.4);
+    white-space:nowrap;user-select:none;
+}
+/* 数据胶囊 */
+.gtb-stat{
+    display:flex;align-items:center;gap:3px;
+    padding:4px 9px;border-radius:6px;
+    background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.06);
+    font-size:0.72em;color:rgba(255,255,255,0.65);
+    font-weight:600;white-space:nowrap;user-select:none;
+}
+.gtb-stat span{color:#FFC107;font-weight:700}
+/* 青蛙状态胶囊 */
+.gtb-frog{
+    display:flex;flex-direction:column;align-items:center;gap:1px;
+    padding:2px 8px;border-radius:6px;
+    background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.06);
+    min-width:70px;
+}
+.gtb-frog-top{display:flex;gap:5px;align-items:baseline}
+.gtb-frog-lv{font-size:0.68em;color:#FFD700;font-weight:700;white-space:nowrap}
+.gtb-frog-rate{font-size:0.62em;color:rgba(255,255,255,0.45);white-space:nowrap}
+.gtb-frog-xp{width:100%;height:3px;border-radius:2px;background:rgba(255,255,255,0.1);overflow:hidden}
+.gtb-frog-xp-bar{height:100%;border-radius:2px;background:linear-gradient(90deg,#4CAF50,#8BC34A,#FFC107);transition:width 0.4s}
+.gtb-frog-xp-bar.max{background:linear-gradient(90deg,#FFD700,#FFA000)}
+/* 图标按钮 */
+.gtb-btn{
+    width:30px;height:30px;border-radius:7px;
+    background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);
+    color:rgba(255,255,255,0.75);font-size:0.85em;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    transition:all 0.2s;flex-shrink:0;
+}
+.gtb-btn:hover{background:rgba(255,255,255,0.12);color:#fff}
+.gtb-btn.muted{opacity:0.4}
+
+/* 保底计数器 */
+.pity-display{
+    position:absolute;
+    top:48px;left:50%;transform:translateX(-50%);
+    display:flex;gap:18px;
+    pointer-events:none;
+    z-index:99;
+}
+.pity-item{
+    background:rgba(0,0,0,0.45);
+    padding:4px 12px;border-radius:10px;
+    font-size:0.75em;color:#aaa;font-weight:bold;
+    text-shadow:0 0 6px rgba(0,0,0,0.6);
+    white-space:nowrap;
+}
+.pity-item span{color:#FFD700}
+
+/* 10连结果覆盖层 */
+.results-overlay{
+    position:fixed;top:0;left:0;width:100%;height:100%;
+    background:rgba(0,0,0,0.75);
+    display:none;justify-content:center;align-items:center;
+    z-index:500;flex-direction:column;gap:15px;
+}
+.results-overlay.active{display:flex}
+.results-grid{
+    display:flex;flex-wrap:wrap;justify-content:center;
+    gap:12px;max-width:600px;padding:10px;
+}
+.result-card{
+    width:100px;padding:10px 6px;border-radius:12px;
+    text-align:center;background:rgba(255,255,255,0.08);
+    border:2px solid rgba(255,255,255,0.12);
+    color:#fff;font-size:0.85em;
+    animation:cardIn 0.4s ease-out both;
+}
+@keyframes cardIn{
+    0%{opacity:0;transform:translateY(30px) scale(0.7)}
+    100%{opacity:1;transform:translateY(0) scale(1)}
+}
+.result-card .card-emoji{font-size:2em;display:block}
+.result-card .card-name{font-weight:bold;margin:4px 0}
+.result-card .card-stars{font-size:0.7em;margin:2px 0}
+.result-card.N{border-color:rgba(100,180,255,0.5);background:rgba(50,100,180,0.15)}
+.result-card.R{border-color:rgba(160,100,255,0.6);background:rgba(80,40,150,0.2)}
+.result-card.SR{border-color:rgba(255,200,50,0.6);background:rgba(150,100,20,0.2)}
+.result-card.SSR{border-color:rgba(255,150,50,0.8);background:linear-gradient(135deg,rgba(255,100,50,0.2),rgba(255,200,0,0.15))}
+.result-card.UR{border-color:rgba(255,50,150,0.9);background:linear-gradient(135deg,rgba(255,50,100,0.25),rgba(255,200,0,0.2));animation:cardIn 0.4s ease-out both,urShine 1.5s ease-in-out infinite}
+@keyframes urShine{
+    0%,100%{box-shadow:0 0 15px rgba(255,215,0,0.6)}
+    50%{box-shadow:0 0 35px rgba(255,100,200,0.9),0 0 60px rgba(255,200,0,0.6)}
+}
+
+/* 弹出toast */
+.toast{
+    position:fixed;bottom:150px;left:50%;transform:translateX(-50%) translateY(50px);
+    padding:10px 24px;border-radius:22px;z-index:999;
+    font-weight:bold;font-size:0.95em;
+    transition:transform 0.4s cubic-bezier(0.175,0.885,0.32,1.275),opacity 0.4s;
+    pointer-events:none;opacity:0;
+    backdrop-filter:blur(8px);white-space:nowrap;
+}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+.toast.gold{background:rgba(255,215,0,0.2);border:1px solid gold;color:#FFD700}
+.toast.blue{background:rgba(100,180,255,0.2);border:1px solid #64B4FF;color:#8EC8FF}
+.toast.purple{background:rgba(160,100,255,0.2);border:1px solid #A064FF;color:#C8A0FF}
+.toast.red{background:rgba(255,50,50,0.2);border:1px solid #EF5350;color:#FF8888}
+.toast.orange{background:rgba(255,150,30,0.2);border:1px solid #FF9800;color:#FFB74D}
+.toast.rainbow{background:rgba(255,50,150,0.2);border:1px solid #FF3296;color:#FF80C0;animation:toastRainbow 1s linear infinite}
+.toast.gray{background:rgba(100,100,100,0.2);border:1px solid #888;color:#aaa}
+@keyframes toastRainbow{
+    0%{border-color:#FF4444;color:#FF8888}
+    33%{border-color:#FFD700;color:#FFD700}
+    66%{border-color:#FF3296;color:#FF80C0}
+    100%{border-color:#FF4444;color:#FF8888}
+}
+
+/* 底部操作栏 - 抽卡风格 */
+.bottom-bar{
+    position:absolute;
+    bottom:16px;
+    left:50%;
+    transform:translateX(-50%);
+    display:flex;
+    gap:14px;
+    z-index:10;
+}
+.gacha-btn{
+    padding:16px 34px;
+    font-size:1em;
+    font-weight:bold;
+    border:none;
+    border-radius:28px;
+    cursor:pointer;
+    transition:all 0.25s;
+    font-family:inherit;
+    letter-spacing:2px;
+    position:relative;
+    overflow:hidden;
+}
+.gacha-btn:active{transform:scale(0.93)}
+.gacha-btn.disabled{opacity:0.35;pointer-events:none;cursor:not-allowed}
+.btn-single{
+    background:linear-gradient(135deg,#3498db,#2980b9);
+    color:#fff;
+    box-shadow:0 4px 18px rgba(52,152,219,0.4);
+    font-size:1.05em;
+}
+.btn-single:hover{box-shadow:0 6px 28px rgba(52,152,219,0.7);transform:translateY(-2px)}
+.btn-ten{
+    background:linear-gradient(135deg,#e74c3c,#c0392b);
+    color:#fff;
+    box-shadow:0 4px 20px rgba(231,76,60,0.45);
+    font-size:1.15em;
+    animation:tenGlow 2s ease-in-out infinite;
+}
+@keyframes tenGlow{
+    0%,100%{box-shadow:0 4px 20px rgba(231,76,60,0.45)}
+    50%{box-shadow:0 8px 35px rgba(255,120,80,0.8),0 0 55px rgba(255,80,30,0.4)}
+}
+.btn-ten:hover{box-shadow:0 8px 38px rgba(255,120,80,0.9);transform:translateY(-3px)}
+.btn-sell{
+    background:linear-gradient(135deg,#2ecc71,#27ae60);
+    color:#fff;
+    box-shadow:0 4px 18px rgba(46,204,113,0.4);
+}
+.btn-sell:hover{box-shadow:0 6px 28px rgba(46,204,113,0.7);transform:translateY(-2px)}
+.btn-album{
+    background:linear-gradient(135deg,#9b59b6,#8e44ad);
+    color:#fff;
+    box-shadow:0 4px 18px rgba(155,89,182,0.4);
+}
+.btn-album:hover{box-shadow:0 6px 28px rgba(155,89,182,0.7);transform:translateY(-2px)}
+.btn-shop{
+    background:linear-gradient(135deg,#f39c12,#e67e22);
+    color:#fff;
+    box-shadow:0 4px 18px rgba(243,156,18,0.4);
+}
+.btn-shop:hover{box-shadow:0 6px 28px rgba(255,180,40,0.7);transform:translateY(-2px)}
+
+/* 大鱼卡揭示弹窗 */
+.reveal-overlay{
+    position:fixed;top:0;left:0;width:100%;height:100%;
+    background:rgba(0,0,0,0);
+    display:none;justify-content:center;align-items:center;
+    z-index:400;transition:background 0.5s;
+}
+.reveal-overlay.active{display:flex}
+.reveal-overlay.dim{background:rgba(0,0,0,0.55)}
+.reveal-card{
+    text-align:center;color:#fff;
+    padding:25px 30px;border-radius:20px;
+    transition:all 0.5s;
+    min-width:200px;
+}
+.reveal-card .rv-emoji{font-size:4em;display:block;animation:rvBounce 0.6s ease-out}
+.reveal-card .rv-name{font-size:1.4em;font-weight:bold;margin:8px 0}
+.reveal-card .rv-stars{font-size:1em;margin:4px 0;letter-spacing:3px}
+.reveal-card .rv-weight{font-size:0.9em;color:#aaa;margin:4px 0}
+.reveal-card .rv-value{font-size:1.1em;color:#FFD700;font-weight:bold;margin:8px 0}
+.reveal-card .rv-new{display:inline-block;padding:3px 12px;border-radius:10px;background:rgba(46,204,113,0.3);color:#2ecc71;font-size:0.85em;margin:4px 0}
+.reveal-card.N{border:2px solid rgba(100,180,255,0.4);background:rgba(30,60,100,0.85)}
+.reveal-card.R{border:2px solid rgba(150,100,255,0.5);background:rgba(50,30,90,0.85)}
+.reveal-card.SR{border:2px solid rgba(255,200,50,0.6);background:rgba(80,50,15,0.85)}
+.reveal-card.SSR{border:2px solid rgba(255,130,50,0.7);background:linear-gradient(135deg,rgba(100,30,10,0.85),rgba(120,60,0,0.8))}
+.reveal-card.UR{border:2px solid rgba(255,50,150,0.9);background:linear-gradient(135deg,rgba(80,10,30,0.9),rgba(120,40,10,0.85));animation:urCardGlow 1s ease-in-out infinite alternate}
+@keyframes rvBounce{
+    0%{transform:scale(0) rotate(-15deg)}
+    60%{transform:scale(1.3) rotate(5deg)}
+    100%{transform:scale(1) rotate(0)}
+}
+@keyframes urCardGlow{
+    0%{box-shadow:0 0 25px rgba(255,215,0,0.5),inset 0 0 20px rgba(255,100,50,0.15)}
+    100%{box-shadow:0 0 50px rgba(255,100,200,0.8),0 0 80px rgba(255,200,0,0.5),inset 0 0 35px rgba(255,150,200,0.3)}
+}
+
+/* 图鉴面板 */
+.album-overlay{
+    position:fixed;top:0;left:0;width:100%;height:100%;
+    background:rgba(0,0,0,0.88);
+    display:none;justify-content:center;align-items:center;
+    z-index:600;flex-direction:column;
+}
+.album-overlay.active{display:flex}
+.album-content{
+    background:linear-gradient(180deg,#1a2a3a,#0a1520);
+    border-radius:16px;padding:24px;max-width:700px;width:92%;
+    max-height:80vh;overflow-y:auto;color:#fff;
+    border:2px solid rgba(255,215,0,0.2);
+}
+.album-title{text-align:center;font-size:1.3em;color:#FFD700;margin-bottom:16px}
+.album-grid{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.album-cell{
+    width:80px;padding:8px 4px;border-radius:10px;
+    text-align:center;font-size:0.78em;color:#aaa;
+    background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);
+}
+.album-cell.owned{color:#fff;border-color:rgba(255,215,0,0.3);background:rgba(255,215,0,0.08)}
+.album-cell .ae{font-size:1.6em;display:block}
+.album-progress{text-align:center;font-size:0.85em;color:#FFD700;margin-bottom:10px}
+.album-progress span{font-size:1.1em;font-weight:bold}
+.album-close{margin-top:16px}
+
+
+/* 关卡指示器 */
+.level-indicator{
+    position:absolute;
+    top:48px;left:50%;transform:translateX(-50%);
+    display:none;flex-direction:column;align-items:center;
+    gap:2px;z-index:99;
+    background:rgba(0,0,0,0.55);
+    padding:6px 20px;border-radius:12px;
+    font-size:0.8em;text-shadow:0 0 6px rgba(0,0,0,0.5);
+}
+.level-indicator span{white-space:nowrap}
+
+/* 关卡通关弹窗 */
+.level-complete-overlay{
+    position:fixed;top:0;left:0;width:100%;height:100%;
+    background:rgba(0,0,0,0.8);
+    display:none;justify-content:center;align-items:center;
+    z-index:700;flex-direction:column;
+}
+.level-complete-overlay.active{display:flex}
+.lc-card{
+    text-align:center;color:#fff;
+    background:linear-gradient(135deg,rgba(30,60,100,0.95),rgba(10,20,40,0.95));
+    border:2px solid rgba(255,215,0,0.5);
+    border-radius:20px;padding:35px 40px;
+    animation:lcIn 0.5s ease-out;
+    box-shadow:0 0 60px rgba(255,215,0,0.3);
+}
+@keyframes lcIn{
+    0%{transform:scale(0.5);opacity:0}
+    60%{transform:scale(1.08)}
+    100%{transform:scale(1);opacity:1}
+}
+.lc-stars{font-size:2.5em;margin-bottom:8px;animation:lcStars 0.8s ease-out}
+@keyframes lcStars{
+    0%{transform:scale(0) rotate(-90deg)}
+    100%{transform:scale(1) rotate(0)}
+}
+.lc-title{font-size:1.4em;font-weight:bold;color:#FFD700;margin:10px 0}
+.lc-caught{font-size:1em;color:#aaa;margin:6px 0}
+.lc-reward{font-size:0.95em;color:#FFD700;margin:6px 0}
+
+/* 道具商店 */
+.item-shop-overlay{
+    position:fixed;top:0;left:0;width:100%;height:100%;
+    background:rgba(0,0,0,0.85);
+    display:none;justify-content:center;align-items:center;
+    z-index:650;flex-direction:column;
+}
+.item-shop-overlay.active{display:flex}
+.shop-content{
+    background:linear-gradient(180deg,#1e2d3d,#0f1a24);
+    border-radius:16px;padding:24px;max-width:420px;width:90%;
+    color:#fff;border:2px solid rgba(255,180,40,0.3);
+    box-shadow:0 0 50px rgba(255,150,20,0.2);
+}
+.shop-title{text-align:center;font-size:1.3em;color:#FFD700;margin-bottom:6px}
+.shop-coins{text-align:center;font-size:1em;color:#f39c12;margin-bottom:16px;font-weight:bold}
+.shop-item{
+    display:flex;align-items:center;gap:12px;
+    padding:12px 14px;margin-bottom:10px;
+    background:rgba(255,255,255,0.04);border-radius:12px;
+    border:1px solid rgba(255,255,255,0.06);
+    transition:all 0.2s;
+}
+.shop-item:hover{background:rgba(255,255,255,0.08)}
+.shop-item-icon{font-size:2em;min-width:36px;text-align:center}
+.shop-item-info{flex:1;min-width:0}
+.shop-item-name{font-weight:bold;font-size:0.95em}
+.shop-item-desc{font-size:0.75em;color:#aaa;margin-top:2px}
+.shop-item-count{font-size:0.8em;color:#f39c12;margin-top:2px}
+.shop-item-actions{display:flex;flex-direction:column;gap:5px;align-items:flex-end}
+.shop-btn{
+    padding:6px 14px;border:none;border-radius:14px;
+    cursor:pointer;font-weight:bold;font-size:0.8em;
+    font-family:inherit;white-space:nowrap;
+    transition:all 0.2s;
+}
+.shop-btn:active{transform:scale(0.93)}
+.shop-btn-buy{background:#f39c12;color:#fff}
+.shop-btn-buy:hover{background:#e67e22;box-shadow:0 2px 10px rgba(243,156,18,0.5)}
+.shop-btn-use{background:rgba(46,204,113,0.7);color:#fff}
+.shop-btn-use:hover{background:#2ecc71;box-shadow:0 2px 10px rgba(46,204,113,0.5)}
+.shop-btn.disabled{opacity:0.35;pointer-events:none}
+.btn-endday{background:linear-gradient(135deg,#FF9800,#E65100)!important;color:#FFF9C4!important;font-size:0.86em!important;padding:8px 14px!important;animation:enddayPulse 2s infinite}
+@keyframes enddayPulse{0%,100%{box-shadow:0 0 10px rgba(255,152,0,0.4)}50%{box-shadow:0 0 22px rgba(255,152,0,0.9)}}
+.btn-dive{background:linear-gradient(135deg,#03A9F4,#01579B)!important;color:#E1F5FE!important;font-size:0.86em!important;padding:8px 14px!important;box-shadow:0 4px 18px rgba(3,169,244,0.45)}
+.btn-dive:hover{box-shadow:0 6px 28px rgba(3,169,244,0.7);transform:translateY(-2px)}
+.btn-dive.disabled{opacity:0.45;pointer-events:none;cursor:not-allowed}
+.btn-frog-upgrade{background:linear-gradient(135deg,#8BC34A,#558B2F)!important;color:#F1F8E9!important;font-size:0.86em!important;padding:8px 14px!important;box-shadow:0 4px 18px rgba(139,195,74,0.4)}
+.btn-frog-upgrade:hover{box-shadow:0 6px 28px rgba(139,195,74,0.8);transform:translateY(-2px)}
+.btn-frog-upgrade.disabled{opacity:0.45;pointer-events:none;cursor:not-allowed}
+
+/* 潜水寻宝小游戏 */
+.poseidon-overlay{
+    position:fixed;top:0;left:0;width:100%;height:100%;
+    background:rgba(0,0,15,0.9);
+    display:none;justify-content:center;align-items:center;
+    z-index:2000;flex-direction:column;
+}
+.poseidon-overlay.active{display:flex}
+.poseidon-card{
+    background:linear-gradient(135deg,#0a1628,#0d2b4a);
+    border:2px solid rgba(64,160,255,0.5);
+    border-radius:20px;padding:40px 36px;text-align:center;max-width:420px;width:90%;
+    box-shadow:0 0 60px rgba(64,160,255,0.3),inset 0 1px 0 rgba(255,255,255,0.05);
+    animation:poseidonIn 0.5s ease-out;
+}
+@keyframes poseidonIn{0%{opacity:0;transform:scale(0.8) translateY(20px)}100%{opacity:1;transform:scale(1) translateY(0)}}
+.poseidon-avatar{position:relative;width:120px;height:120px;margin:0 auto 12px;animation:poseidonFloat 2s ease-in-out infinite}
+.poseidon-head{position:absolute;width:80px;height:80px;background:linear-gradient(180deg,#6db3c7 0%,#4a90a4 60%,#2d6e82 100%);border-radius:50%;top:15px;left:20px;z-index:2;box-shadow:0 4px 15px rgba(0,100,130,0.5),inset 0 -5px 15px rgba(0,0,0,0.2)}
+.poseidon-face{position:absolute;width:100%;height:100%;top:0;left:0}
+.poseidon-eye-l,.poseidon-eye-r{position:absolute;width:10px;height:12px;background:#fff;border-radius:50%;top:28px;box-shadow:0 0 6px #fff}
+.poseidon-eye-l{left:20px}.poseidon-eye-r{right:20px}
+.poseidon-eye-l::after,.poseidon-eye-r::after{content:'';position:absolute;width:5px;height:5px;background:#1a1a2e;border-radius:50%;top:3px;left:3px}
+.poseidon-beard{position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);width:50px;height:28px;background:linear-gradient(180deg,#d4dbe6 0%,#bcc5d0 50%,#a8b4c0 100%);border-radius:0 0 30px 30px;box-shadow:0 2px 4px rgba(0,0,0,0.2)}
+.poseidon-crown{position:absolute;top:-18px;left:50%;transform:translateX(-50%);display:flex;align-items:flex-end;gap:4px;z-index:3}
+.crown-spike{width:14px;height:24px;background:linear-gradient(180deg,#ffd700 0%,#ffb800 80%,#e6a800 100%);border-radius:6px 6px 2px 2px;box-shadow:0 1px 3px rgba(0,0,0,0.3)}
+.crown-spike.main{width:16px;height:30px;border-radius:8px 8px 2px 2px;margin-bottom:-3px}
+.poseidon-trident{position:absolute;right:8px;top:20px;font-size:36px;z-index:3;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4));transform:rotate(-15deg)}
+.poseidon-waves{position:absolute;bottom:-5px;left:10px;display:flex;gap:2px;font-size:20px;z-index:1;opacity:0.7;animation:waveRipple 1.5s ease-in-out infinite}
+@keyframes poseidonFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+@keyframes waveRipple{0%,100%{opacity:0.4;transform:scale(0.9)}50%{opacity:0.8;transform:scale(1.05)}}
+.poseidon-title{font-size:1.5em;font-weight:bold;color:#64B5F6;margin-bottom:8px}
+.poseidon-desc{font-size:0.9em;color:#8ba4c0;margin-bottom:18px}
+.poseidon-question{font-size:1.15em;color:#FFD700;margin-bottom:22px;text-shadow:0 0 12px rgba(255,215,0,0.3);line-height:1.5}
+.poseidon-options{display:flex;flex-direction:column;gap:10px}
+.poseidon-btn{
+    padding:14px 20px;border-radius:12px;border:1px solid rgba(64,160,255,0.3);
+    background:rgba(255,255,255,0.06);color:#cde;font-size:1em;
+    cursor:pointer;transition:all 0.2s;font-family:inherit;
+}
+.poseidon-btn:hover{background:rgba(64,160,255,0.15);border-color:rgba(64,160,255,0.6);transform:scale(1.02)}
+.poseidon-btn.correct{background:rgba(76,175,80,0.3)!important;border-color:#4CAF50!important;color:#C8E6C9!important}
+.poseidon-btn.wrong{background:rgba(211,47,47,0.3)!important;border-color:#D32F2F!important;color:#FFCDD2!important}
+.poseidon-btn:disabled{pointer-events:none;opacity:0.7}
+
+.dive-overlay{
+    position:fixed;top:0;left:0;width:100%;height:100%;
+    background:rgba(0,0,0,0.85);
+    display:none;justify-content:center;align-items:center;
+    z-index:800;flex-direction:column;
+}
+.dive-overlay.active{display:flex}
+.dive-card{
+    text-align:center;color:#fff;
+    background:linear-gradient(180deg,#0a1a3a,#041228);
+    border:2px solid rgba(79,195,247,0.5);
+    border-radius:24px;padding:28px 32px;
+    max-width:780px;width:95%;
+    box-shadow:0 0 80px rgba(0,150,255,0.35),inset 0 0 4px rgba(79,195,247,0.15),inset 0 0 40px rgba(0,0,0,0.25);
+    animation:diveIn 0.4s ease-out;
+}
+@keyframes diveIn{
+    0%{transform:scale(0.65) translateY(30px);opacity:0}
+    100%{transform:scale(1) translateY(0);opacity:1}
+}
+.dive-title{font-size:1.6em;font-weight:bold;color:#4FC3F7;margin-bottom:6px;text-shadow:0 0 16px rgba(79,195,247,0.6)}
+.dive-subtitle{font-size:0.95em;color:#81D4FA;margin-bottom:12px}
+.dive-round{font-size:1.05em;color:#FFD54F;margin-bottom:12px;font-weight:bold}
+.dive-area{
+    position:relative;width:100%;height:480px;
+    background:radial-gradient(ellipse at 50% 0%,rgba(20,80,150,0.5),transparent 60%),
+               radial-gradient(ellipse at 30% 70%,rgba(10,100,180,0.3),transparent 50%),
+               radial-gradient(ellipse at 70% 40%,rgba(5,60,140,0.35),transparent 50%),
+               linear-gradient(180deg,#0d2b5e,#05204e,#03183a,#021126);
+    border-radius:16px;border:2px solid rgba(79,195,247,0.45);
+    overflow:hidden;margin-bottom:12px;
+    box-shadow:inset 0 0 60px rgba(0,100,220,0.4),inset 0 60px 50px -15px rgba(100,200,255,0.12),
+               inset 0 -20px 30px rgba(0,0,0,0.5);
+}
+.dive-item{
+    position:absolute;cursor:pointer;user-select:none;
+    font-size:2.8em;
+    filter:drop-shadow(0 2px 6px rgba(0,0,0,0.7));
+    opacity:0;transform:scale(0.3);
+    transition:transform 0.15s ease-out, filter 0.15s;
+    pointer-events:none;
+}
+.dive-item.show{
+    opacity:1;transform:scale(1);
+    pointer-events:auto;
+    filter:drop-shadow(0 4px 10px rgba(0,0,0,0.7)) drop-shadow(0 0 14px rgba(79,195,247,0.35));
+    animation:itemFloat 3s ease-in-out infinite;
+}
+.dive-item.show.rare{font-size:3.4em;filter:drop-shadow(0 4px 14px rgba(0,0,0,0.8)) drop-shadow(0 0 22px rgba(255,215,0,0.55))!important}
+.dive-item.show:hover{transform:scale(1.4);filter:drop-shadow(0 4px 16px rgba(0,0,0,0.85)) drop-shadow(0 0 26px rgba(255,215,0,0.5))!important}
+.dive-item.show:active{transform:scale(0.65);transition:transform 0.08s}
+.dive-item.leaving{opacity:0;transform:scale(0.3);transition:opacity 0.35s ease-in,transform 0.35s ease-in;pointer-events:none;animation:none!important}
+@keyframes itemFloat{
+    0%,100%{transform:translateY(0)}
+    50%{transform:translateY(-8px)}
+}
+@keyframes flash{0%,100%{opacity:1}50%{opacity:0.3}}
+.dive-bubble{
+    position:absolute;bottom:-10px;
+    background:radial-gradient(circle at 30% 30%,rgba(255,255,255,0.7),rgba(79,195,247,0.3),transparent);
+    border-radius:50%;pointer-events:none;
+    animation:bubbleUp 4s ease-out forwards;
+}
+@keyframes bubbleUp{
+    0%{transform:translateY(0);opacity:0.8}
+    100%{transform:translateY(-380px);opacity:0}
+}
+.dive-pop{
+    position:absolute;font-size:1em;font-weight:bold;
+    color:#FFD700;pointer-events:none;
+    animation:popUp 0.8s ease-out forwards;
+    text-shadow:0 0 8px rgba(255,215,0,0.6);
+}
+@keyframes popUp{
+    0%{transform:translateY(0);opacity:1}
+    100%{transform:translateY(-50px);opacity:0}
+}
+.dive-earned{font-size:1.1em;color:#4FC3F7;margin-top:6px;min-height:26px;text-shadow:0 0 8px rgba(79,195,247,0.4)}
+.dive-close-btn{font-size:1em !important;padding:12px 34px !important}
+
+/* ============ 新增：模式选择 ============ */
+.mode-pick{position:fixed;top:0;left:0;width:100%;height:100%;background:linear-gradient(180deg,#0a1628,#0d2137,#0a1a30);display:flex;justify-content:center;align-items:center;z-index:1000;flex-direction:column}
+.mode-pick.hidden{display:none!important}
+.mp-title-wrap{text-align:center;margin-bottom:40px}
+.mp-title{font-size:2.2em;font-weight:bold;color:#FFD700;text-shadow:0 0 30px rgba(255,215,0,0.4)}
+.mp-sub{font-size:1em;color:#aaa;margin-top:8px}
+.mp-cards{display:flex;gap:30px;flex-wrap:wrap;justify-content:center}
+.mp-card{width:240px;padding:30px 24px;border-radius:20px;text-align:center;cursor:pointer;transition:all 0.3s;border:2px solid transparent;background:rgba(255,255,255,0.04);color:#fff}
+.mp-card:hover{transform:translateY(-8px);background:rgba(255,255,255,0.08)}
+.mp-card.mp-level{border-color:rgba(52,152,219,0.4)}
+.mp-card.mp-level:hover{border-color:rgba(52,152,219,0.8);box-shadow:0 8px 40px rgba(52,152,219,0.3)}
+.mp-card.mp-adv{border-color:rgba(231,76,60,0.4)}
+.mp-card.mp-adv:hover{border-color:rgba(231,76,60,0.8);box-shadow:0 8px 40px rgba(231,76,60,0.3)}
+.mp-icon{font-size:3em;display:block;margin-bottom:12px}
+.mp-card-title{font-size:1.3em;font-weight:bold;margin-bottom:6px}
+.mp-card-desc{font-size:0.82em;color:#aaa;line-height:1.5}
+.mp-card-features{font-size:0.75em;color:#888;margin-top:10px;text-align:left;line-height:1.8}
+.mp-card-features span{color:#FFD700}
+.mp-frog-status{margin-top:35px;padding:12px 24px;border-radius:14px;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.1);text-align:center;color:#ccc;font-size:0.85em}
+
+/* DEV 开发者模式 */
+.dev-overlay{position:fixed;inset:0;z-index:300;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.72);backdrop-filter:blur(4px)}
+.dev-overlay.active{display:flex}
+.dev-panel{width:min(380px,90vw);padding:28px 26px;border-radius:20px;background:linear-gradient(160deg,#1a2332,#0f1522);border:1px solid rgba(255,215,0,0.35);box-shadow:0 20px 60px rgba(0,0,0,0.6);text-align:center;display:flex;flex-direction:column;gap:12px}
+.dev-title{font-size:1.35em;font-weight:bold;color:#FFD700;text-shadow:0 0 20px rgba(255,215,0,0.35)}
+.dev-desc{font-size:0.78em;color:#999;margin-bottom:6px}
+.dev-btn{padding:13px 18px;border-radius:12px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.06);color:#fff;font-size:0.95em;cursor:pointer;transition:all 0.2s}
+.dev-btn:hover{background:rgba(255,255,255,0.14);transform:translateY(-2px)}
+.dev-btn-main{border-color:rgba(231,76,60,0.6);background:rgba(231,76,60,0.22)}
+.dev-btn-main:hover{background:rgba(231,76,60,0.38);box-shadow:0 6px 24px rgba(231,76,60,0.3)}
+.dev-btn-close{margin-top:6px;border-color:transparent;background:rgba(255,255,255,0.04);color:#888}
+.dev-lv-row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.dev-lv{flex:1;min-width:52px;padding:10px 8px;font-size:0.85em}
+.dev-lv-max{border-color:rgba(255,215,0,0.5);background:rgba(255,215,0,0.15)}
+.dev-lv-max:hover{background:rgba(255,215,0,0.3)}
+.battle-exit-btn{position:absolute;top:16px;right:16px;z-index:12;background:rgba(0,0,0,0.55);border:1px solid rgba(255,255,255,0.25);color:#fff;padding:8px 16px;border-radius:10px;cursor:pointer;font-size:0.85em}
+.battle-exit-btn:hover{background:rgba(255,80,80,0.35)}
+
+/* 开场剧情 */
+.mp-lore{max-width:620px;width:90%;text-align:center;margin-bottom:28px;animation:loreFade 1.5s ease-out}
+@keyframes loreFade{0%{opacity:0;transform:translateY(15px)}100%{opacity:1;transform:translateY(0)}}
+.lore-line{font-size:0.88em;color:#bcc9d4;line-height:1.9;margin:0;letter-spacing:0.5px}
+.lore-line .hl{color:#FFD700;text-shadow:0 0 10px rgba(255,215,0,0.45)}
+.lore-line .hl-pink{color:#FF80C0;text-shadow:0 0 10px rgba(255,128,192,0.5)}
+.lore-line .hl-blue{color:#64B5F6;text-shadow:0 0 10px rgba(100,181,246,0.5)}
+.lore-line .hl-green{color:#8BC34A;text-shadow:0 0 10px rgba(139,195,74,0.5)}
+.lore-divider{display:inline-block;width:40px;height:1px;background:rgba(255,215,0,0.3);margin:8px auto}
+
+/* ===== 钓鱼模式中部HUD面板（天数/危险/收益一体化） ===== */
+.fishing-hud{
+    position:fixed;
+    top:46px; left:50%;
+    transform:translateX(-50%);
+    z-index:99;
+    display:none;
+    flex-direction:column;
+    align-items:center;
+    gap:5px;
+    pointer-events:none;
+    width:auto;
+    padding-top:2px;
+}
+.fishing-hud.active{display:flex}
+
+/* HUD信息栏 */
+.fh-bar{
+    display:flex; align-items:center;
+    background:rgba(6,12,24,0.9);
+    border:1px solid rgba(255,255,255,0.08);
+    border-radius:8px;
+    overflow:hidden;
+    backdrop-filter:blur(6px);
+}
+.fh-bar>.fh-cell{
+    padding:5px 11px;
+    font-size:0.72em;
+    color:rgba(255,255,255,0.55);
+    font-weight:600;
+    white-space:nowrap;
+    display:flex; align-items:center; gap:4px;
+}
+.fh-bar>.fh-cell span{color:#FFC107; font-weight:700}
+.fh-bar>.fh-cell+.fh-cell{border-left:1px solid rgba(255,255,255,0.07)}
+
+.fh-day-cell{
+    font-weight:700!important;
+    color:#FFD700!important;
+    font-size:0.8em!important;
+    text-shadow:0 0 6px rgba(255,215,0,0.35);
+}
+
+/* 危险值单元 */
+.fh-danger{
+    display:flex; align-items:center; gap:5px;
+    padding:5px 11px;
+    border-left:1px solid rgba(255,255,255,0.07);
+}
+.fh-danger-label{
+    font-size:0.68em; color:#EF5350; font-weight:700;
+    white-space:nowrap;
+}
+.fh-danger-bar-wrap{
+    width:65px; height:5px; border-radius:3px;
+    background:rgba(255,255,255,0.1); overflow:hidden;
+}
+.fh-danger-bar-fill{
+    height:100%; border-radius:3px;
+    transition:width 0.4s;
+    background:linear-gradient(90deg,#4CAF50,#FFC107 38%,#FF5722 68%,#E53935);
+}
+.fh-danger-pct{
+    font-size:0.65em; font-weight:700; color:#FF8A65;
+    min-width:30px; text-align:right;
+}
+
+/* HUD按钮行 */
+.fh-actions{
+    display:flex; align-items:center; gap:6px;
+    pointer-events:auto;
+}
+.fh-btn{
+    padding:5px 15px; border-radius:7px;
+    font-size:0.75em; font-weight:700;
+    border:1px solid rgba(255,255,255,0.18);
+    cursor:pointer; font-family:inherit;
+    transition:all 0.2s;
+    white-space:nowrap;
+}
+.fh-btn-home{
+    background:rgba(76,175,80,0.22); color:#A5D6A7;
+    border-color:rgba(129,199,132,0.35);
+}
+.fh-btn-home:hover{background:rgba(76,175,80,0.4); color:#E8F5E9; transform:translateY(-1px)}
+.fh-btn-quit{
+    background:rgba(229,57,53,0.15); color:#EF9A9A;
+    border-color:rgba(229,57,53,0.3);
+    font-size:0.7em;
+}
+.fh-btn-quit:hover{background:rgba(229,57,53,0.3); color:#FFCDD2; transform:translateY(-1px)}
+
+/* 冒险结算 */
+.adv-result-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);display:none;justify-content:center;align-items:center;z-index:750;flex-direction:column}
+.adv-result-overlay.active{display:flex}
+.adv-result-card{text-align:center;color:#fff;background:linear-gradient(135deg,rgba(30,60,100,0.95),rgba(10,20,40,0.95));border:2px solid rgba(255,215,0,0.5);border-radius:20px;padding:35px 40px;animation:lcIn 0.5s ease-out;box-shadow:0 0 60px rgba(255,215,0,0.3)}
+.adv-result-title{font-size:1.5em;font-weight:bold;margin:15px 0}
+.adv-result-detail{font-size:0.95em;color:#aaa;margin:10px 0;white-space:pre-line;line-height:1.6}
+.adv-result-btns{display:flex;gap:15px;margin-top:20px;justify-content:center}
+#gameTitle{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:90;font-size:0.88em;font-weight:bold;color:rgba(255,255,255,0.65);text-shadow:0 0 8px rgba(0,0,0,0.5);pointer-events:none;white-space:nowrap}
+.hidden{display:none!important}
+
+/* ===== PVZ风格暂停覆盖层 ===== */
+.pause-overlay{
+    position:fixed; top:0; left:0;
+    width:100%; height:100%;
+    background:rgba(8,22,4,0.85);
+    display:none;
+    justify-content:center; align-items:center;
+    z-index:500; flex-direction:column;
+}
+.pause-overlay.active{display:flex}
+
+.pause-panel{
+    background:linear-gradient(180deg,rgba(55,35,18,0.97) 0%,rgba(35,20,8,0.98) 100%);
+    border:3px solid #6B4226;
+    border-radius:16px;
+    padding:28px 36px 22px;
+    text-align:center;
+    min-width:240px;
+    box-shadow:
+        0 0 0 2px rgba(139,90,40,0.5),
+        0 0 70px rgba(20,50,0,0.5),
+        inset 0 1px 0 rgba(255,255,255,0.04);
+    animation:pvzPopIn 0.25s ease-out;
+}
+@keyframes pvzPopIn{
+    0%{transform:scale(0.82); opacity:0}
+    70%{transform:scale(1.04)}
+    100%{transform:scale(1); opacity:1}
+}
+
+.pause-icon{
+    font-size:2.8em;
+    display:block;
+    margin-bottom:4px;
+    filter:drop-shadow(0 3px 6px rgba(0,0,0,0.5));
+    animation:pvzFloat 2.2s ease-in-out infinite;
+}
+@keyframes pvzFloat{
+    0%,100%{transform:translateY(0)}
+    50%{transform:translateY(-5px)}
+}
+
+
+
+.pause-title{
+    font-size:1.4em; font-weight:900;
+    color:#E8D5A0;
+    text-shadow:0 2px 0 #4A2A14, 0 0 18px rgba(180,140,60,0.35);
+    margin-bottom:3px;
+    letter-spacing:4px;
+}
+.pause-subtitle{
+    font-size:0.7em; color:rgba(190,155,100,0.65);
+    margin-bottom:16px;
+    letter-spacing:2px;
+}
+
+.pause-btn-list{
+    display:flex; flex-direction:column;
+    gap:7px;
+}
+.pause-btn{
+    padding:10px 26px;
+    border-radius:9px;
+    border:2px solid #7B5B3A;
+    background:linear-gradient(180deg,rgba(95,65,25,0.8) 0%,rgba(55,35,12,0.9) 100%);
+    color:#D4C098;
+    font-size:0.88em; font-weight:700;
+    cursor:pointer; font-family:inherit;
+    transition:all 0.15s;
+    text-shadow:0 1px 0 #4A2A14;
+    letter-spacing:1px;
+}
+.pause-btn:hover{
+    background:linear-gradient(180deg,rgba(130,90,35,0.85) 0%,rgba(80,50,18,0.92) 100%);
+    border-color:#A67C52;
+    color:#FFF;
+    transform:scale(1.03);
+    box-shadow:0 0 16px rgba(200,150,60,0.2);
+}
+.pause-btn:active{transform:scale(0.96)}
+
+.pause-btn.primary{
+    border-color:#7CB342;
+    background:linear-gradient(180deg,rgba(90,140,30,0.7) 0%,rgba(50,90,15,0.85) 100%);
+    color:#C5E1A5;
+}
+.pause-btn.primary:hover{
+    background:linear-gradient(180deg,rgba(120,180,45,0.78) 0%,rgba(70,120,20,0.9) 100%);
+    border-color:#9CCC65;
+    color:#fff;
+    box-shadow:0 0 18px rgba(150,220,80,0.25);
+}
+
+.pause-btn.danger{
+    border-color:#8B2A2A;
+    background:linear-gradient(180deg,rgba(130,35,25,0.65) 0%,rgba(80,15,10,0.85) 100%);
+    color:#EF9A9A;
+    font-size:0.75em;
+}
+.pause-btn.danger:hover{
+    background:linear-gradient(180deg,rgba(160,45,30,0.75) 0%,rgba(100,20,12,0.9) 100%);
+    border-color:#C62828;
+    color:#FFCDD2;
+    box-shadow:0 0 14px rgba(220,50,30,0.2);
+}
+
+/* 新手教程覆盖层 */
+.tutorial-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.82);display:none;justify-content:center;align-items:center;z-index:1100;flex-direction:column}
+.tutorial-overlay.active{display:flex}
+/* 演示模式：半透明可穿透，让玩家实际操作钓点 */
+.tutorial-overlay.tutorial-hover-demo{background:rgba(0,0,0,0.28);pointer-events:none}
+.tutorial-overlay.tutorial-hover-demo .tutorial-card{pointer-events:auto}
+.tutorial-hint{margin-top:14px;padding:10px 16px;border-radius:12px;background:rgba(255,215,0,0.14);border:2px dashed rgba(255,215,0,0.65);color:#FFE082;font-size:0.92em;line-height:1.6;animation:rvBounce 1.2s ease-in-out infinite;text-shadow:0 1px 3px rgba(0,0,0,0.6)}
+.tutorial-card{text-align:center;color:#fff;background:linear-gradient(135deg,rgba(15,30,50,0.98),rgba(8,16,30,0.98));border:2px solid rgba(255,200,100,0.5);border-radius:22px;padding:35px 40px;max-width:450px;width:90%;animation:lcIn 0.4s ease-out;box-shadow:0 0 60px rgba(255,180,50,0.25)}
+.tutorial-icon{font-size:3.5em;display:block;margin-bottom:8px;animation:rvBounce 0.8s ease-out}
+.tutorial-title{font-size:1.3em;font-weight:bold;color:#FFD700;margin-bottom:12px}
+.tutorial-desc{font-size:0.9em;color:#ccc;line-height:1.7;margin-bottom:18px;min-height:40px}
+.tutorial-desc .tt-chip{display:inline-block;padding:2px 10px;margin:3px 2px;border-radius:12px;color:#fff;font-size:0.85em;border:1px solid rgba(255,255,255,0.35);box-shadow:0 0 8px rgba(255,255,255,0.15);text-shadow:0 1px 2px rgba(0,0,0,0.5)}
+.tutorial-step-indicator{display:flex;gap:6px;justify-content:center;margin-bottom:12px}
+.tutorial-dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,0.25);transition:all 0.3s}
+.tutorial-dot.active{background:#FFD700;box-shadow:0 0 8px rgba(255,215,0,0.6);width:24px;border-radius:4px}
+.tutorial-btns{display:flex;gap:12px;justify-content:center}
+
+/* 岛屿休整覆盖层 - 全透明让Canvas透出 */
+.island-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:transparent;display:none;z-index:600;pointer-events:none}
+.island-overlay.active{display:block}
+.island-overlay>*{pointer-events:auto}
+
+/* 右上角关闭按钮 */
+.island-close-btn{
+  position:absolute;top:12px;right:12px;
+  z-index:610;
+  padding:8px 18px;
+  border-radius:20px;
+  background:rgba(0,0,0,0.55);
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+  border:1px solid rgba(255,255,255,0.2);
+  color:rgba(255,255,255,0.85);
+  font-size:0.82em;font-weight:bold;
+  cursor:pointer;font-family:inherit;
+  transition:all 0.25s;
+  white-space:nowrap;
+  pointer-events:auto;
+}
+.island-close-btn:hover{background:rgba(255,60,60,0.4);border-color:rgba(255,100,100,0.6);color:#fff}
+
+/* 时间暂停徽章 */
+.island-time-stop{
+  position:absolute;top:16px;left:50%;transform:translateX(-50%);
+  z-index:610;pointer-events:none;
+  padding:6px 16px;border-radius:20px;
+  background:rgba(0,0,0,0.55);
+  border:1px solid rgba(255,215,0,0.35);
+  color:#FFD700;
+  font-size:0.8em;font-weight:bold;letter-spacing:1px;
+  backdrop-filter:blur(6px);
+  white-space:nowrap;
+  animation:islandTimeStopPulse 2s ease-in-out infinite;
+}
+@keyframes islandTimeStopPulse{0%,100%{opacity:0.85}50%{opacity:1}}
+
+/* 右上角数字时钟 */
+.island-clock{
+  position:absolute;top:12px;right:140px;
+  z-index:610;
+  padding:7px 14px;
+  border-radius:10px;
+  background:rgba(0,0,0,0.5);
+  border:1px solid rgba(255,255,255,0.15);
+  color:rgba(255,255,255,0.9);
+  font-family:'Courier New',monospace;
+  font-size:1.1em;
+  font-weight:bold;
+  letter-spacing:1px;
+  pointer-events:auto;
+  backdrop-filter:blur(6px);
+  white-space:nowrap;
+  transition:all 0.25s;
+}
+
+/* 左上角信息卡 */
+.island-info{
+  position:absolute;top:12px;left:16px;
+  z-index:610;
+  background:rgba(0,0,0,0.5);
+  backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);
+  border:1px solid rgba(255,255,255,0.15);
+  border-radius:16px;
+  padding:12px 18px;
+  color:#fff;
+  font-size:0.88em;
+  display:flex;flex-direction:column;gap:5px;
+  min-width:150px;
+  pointer-events:auto;
+}
+.island-info-day{font-weight:bold;color:#FFD700;font-size:0.95em}
+.island-info-coins{color:#FFD700;font-weight:bold}
+.island-info-bag{color:#ccc}
+
+/* 中间三大操作按钮 */
+.island-actions{
+  position:absolute;top:50%;left:50%;
+  transform:translate(-50%,-50%);
+  z-index:610;
+  display:flex;gap:16px;
+  margin-top:-20px;
+  pointer-events:auto;
+}
+.island-act-btn{
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  padding:18px 24px;
+  border-radius:20px;
+  background:rgba(0,0,0,0.5);
+  backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);
+  border:1.5px solid rgba(255,255,255,0.15);
+  cursor:pointer;font-family:inherit;
+  transition:all 0.3s cubic-bezier(0.4,0,0.2,1);
+  position:relative;
+  min-width:90px;
+}
+.island-act-btn:hover{
+  transform:translateY(-4px);
+  background:rgba(0,0,0,0.65);
+  border-color:rgba(255,255,255,0.4);
+  box-shadow:0 8px 32px rgba(0,0,0,0.4);
+}
+.island-act-btn.active{
+  border-color:rgba(139,195,74,0.7);
+  background:rgba(76,175,80,0.25);
+  box-shadow:0 0 28px rgba(139,195,74,0.35);
+}
+.island-act-icon{font-size:2.2em;transition:transform 0.3s}
+.island-act-btn:hover .island-act-icon{transform:scale(1.15)}
+.island-act-label{font-size:0.85em;color:#fff;font-weight:bold}
+.island-act-badge{
+  position:absolute;top:-8px;right:-8px;
+  background:rgba(255,152,0,0.9);
+  color:#fff;font-size:0.75em;font-weight:bold;
+  border-radius:12px;padding:2px 8px;min-width:22px;text-align:center;
+}
+.island-act-lock{
+  position:absolute;top:-6px;right:-6px;
+  font-size:0.9em;
+}
+
+/* 底部详情面板 */
+.island-detail{
+  display:none;
+  position:absolute;bottom:70px;left:50%;
+  transform:translateX(-50%);
+  z-index:610;
+  width:92%;max-width:480px;
+  background:rgba(10,20,15,0.92);
+  backdrop-filter:blur(14px);
+  -webkit-backdrop-filter:blur(14px);
+  border:1.5px solid rgba(139,195,74,0.3);
+  border-radius:20px;
+  padding:0;
+  animation:detailIn 0.35s cubic-bezier(0.34,1.56,0.64,1);
+  max-height:55vh;
+  overflow:hidden;
+  pointer-events:auto;
+}
+.island-detail.show{display:flex;flex-direction:column}
+.island-detail-tabs{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 18px 10px;
+  border-bottom:1px solid rgba(255,255,255,0.08);
+}
+.island-dt-title{font-size:1.1em;font-weight:bold;color:#8BC34A}
+.island-dt-close{
+  font-size:1.1em;color:rgba(255,255,255,0.5);
+  cursor:pointer;padding:2px 6px;
+  transition:color 0.2s;
+}
+.island-dt-close:hover{color:#fff}
+
+.island-panel{min-height:80px;max-height:40vh;overflow-y:auto;padding:12px 18px;flex:1}
+.island-panel.hidden{display:none}
+
+/* 底部操作栏 */
+.island-bottom-bar{
+  position:absolute;bottom:18px;left:50%;
+  transform:translateX(-50%);
+  z-index:610;
+  pointer-events:auto;
+}
+.island-main-btn{
+  padding:12px 30px;
+  border-radius:22px;
+  border:none;
+  font-size:0.95em;font-weight:bold;
+  font-family:inherit;
+  cursor:pointer;
+  transition:all 0.25s;
+  white-space:nowrap;
+}
+.island-main-btn:active{transform:scale(0.94)}
+.island-btn-rest{
+  background:linear-gradient(135deg,#FF9800,#E65100);
+  color:#FFF9C4;
+  box-shadow:0 4px 20px rgba(255,152,0,0.35);
+  animation:restPulse 2.5s infinite;
+}
+@keyframes restPulse{0%,100%{box-shadow:0 4px 20px rgba(255,152,0,0.35)}50%{box-shadow:0 6px 32px rgba(255,152,0,0.7)}}
+.island-btn-rest:hover{transform:translateY(-2px);box-shadow:0 8px 38px rgba(255,152,0,0.6)}
+.island-btn-sell{
+  padding:10px 24px;
+  background:linear-gradient(135deg,#f39c12,#d35400);
+  color:#fff;
+  border-radius:18px;
+}
+.island-btn-sell:hover{transform:translateY(-2px);box-shadow:0 6px 24px rgba(243,156,18,0.5)}
+.island-btn-sell:disabled{opacity:0.4;pointer-events:none}
+/* 岛屿内面板公共样式 */
+.island-panel{min-height:80px;max-height:40vh;overflow-y:auto;padding:12px 18px;flex:1}
+.island-panel.hidden{display:none}
+.island-bag-info{font-size:0.85em;color:#aaa;text-align:center;padding:20px 0}
+.island-bag-list{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto}
+.island-fish-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,0.04);border-radius:10px;border:1px solid rgba(255,255,255,0.06);transition:all 0.2s}
+.island-fish-item:hover{background:rgba(255,255,255,0.08)}
+.island-fish-icon{font-size:1.6em;min-width:30px;text-align:center}
+.island-fish-info{flex:1;min-width:0}
+.island-fish-name{font-size:0.9em;font-weight:bold}
+.island-fish-rarity{font-size:0.72em;color:#FFD700}
+.island-fish-value{font-size:0.85em;color:#81C784;font-weight:bold;white-space:nowrap}
+.island-total{text-align:center;font-size:1em;color:#FFD700;font-weight:bold;margin:10px 0}
+.island-plant-info{font-size:0.85em;color:#aaa;text-align:center;margin-bottom:12px;line-height:1.6}
+.plant-slots{display:flex;flex-direction:column;gap:8px}
+.plant-slot{display:flex;align-items:center;gap:10px;padding:12px 14px;background:rgba(255,255,255,0.04);border-radius:12px;border:1px solid rgba(255,255,255,0.06)}
+.plant-slot-icon{font-size:1.8em;min-width:36px;text-align:center}
+.plant-slot-info{flex:1;min-width:0}
+.plant-slot-name{font-size:0.9em;font-weight:bold}
+.plant-slot-desc{font-size:0.75em;color:#aaa;margin-top:2px}
+.plant-slot-state{font-size:0.72em;color:#8BC34A;margin-top:2px}
+.plant-slot-cost{font-size:0.8em;color:#FFD700;font-weight:bold;white-space:nowrap}
+.plant-btn{padding:6px 14px;border:none;border-radius:14px;cursor:pointer;font-weight:bold;font-size:0.8em;font-family:inherit;transition:all 0.2s;background:linear-gradient(135deg,#8BC34A,#558B2F);color:#fff;white-space:nowrap}
+.plant-btn:hover{box-shadow:0 3px 14px rgba(139,195,74,0.5);transform:translateY(-1px)}
+.plant-btn:active{transform:scale(0.93)}
+.plant-btn:disabled{opacity:0.35;pointer-events:none;cursor:not-allowed}
+.plant-progress{width:100%;height:5px;background:rgba(255,255,255,0.1);border-radius:3px;margin-top:4px;overflow:hidden}
+.plant-progress-bar{height:100%;background:linear-gradient(90deg,#8BC34A,#CDDC39);border-radius:3px;transition:width 0.3s}
+.plant-harvest-btn{padding:4px 10px;border:none;border-radius:10px;cursor:pointer;font-weight:bold;font-size:0.75em;font-family:inherit;background:#FF9800;color:#fff;transition:all 0.2s;white-space:nowrap}
+.plant-harvest-btn:hover{box-shadow:0 2px 10px rgba(255,152,0,0.5)}
+
+/* ============ 结局剧情（彩虹蛙进化/女神） ============ */
+.ending-overlay{
+    position:fixed;top:0;left:0;width:100%;height:100%;
+    background:radial-gradient(ellipse at 50% 20%,rgba(40,20,90,0.92),rgba(5,8,25,0.97));
+    display:none;justify-content:center;align-items:center;
+    z-index:2200;flex-direction:column;
+}
+.ending-overlay.active{display:flex}
+.ending-scene{
+    position:absolute;top:0;left:0;width:100%;height:100%;
+    overflow:hidden;pointer-events:none;
+}
+.ending-star{position:absolute;width:4px;height:4px;background:#fff;border-radius:50%;opacity:0.8;animation:endingTwinkle 2.5s infinite alternate}
+@keyframes endingTwinkle{0%{opacity:0.2;transform:scale(0.7)}100%{opacity:0.9;transform:scale(1.3)}}
+.ending-glow{
+    position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);
+    width:220px;height:220px;border-radius:50%;
+    background:radial-gradient(circle,rgba(255,255,255,0.5) 0%,rgba(255,200,80,0.25) 35%,transparent 70%);
+    animation:endingPulse 2s ease-in-out infinite;pointer-events:none;
+}
+@keyframes endingPulse{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:0.7}50%{transform:translate(-50%,-50%) scale(1.15);opacity:1}}
+.ending-frog{
+    position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);
+    font-size:120px;filter:drop-shadow(0 0 25px rgba(255,180,60,0.8));
+    animation:endingFrogFloat 3s ease-in-out infinite;
+}
+@keyframes endingFrogFloat{0%,100%{transform:translate(-50%,-50%) translateY(0)}50%{transform:translate(-50%,-50%) translateY(-14px)}}
+.ending-rainbow-ring{
+    position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);
+    width:280px;height:280px;border-radius:50%;pointer-events:none;
+    background:conic-gradient(from 0deg,red,orange,yellow,green,cyan,blue,violet,red);
+    -webkit-mask:radial-gradient(circle,transparent 58%,#000 62%);
+    mask:radial-gradient(circle,transparent 58%,#000 62%);
+    opacity:0.85;animation:endingSpin 8s linear infinite;
+}
+@keyframes endingSpin{from{transform:translate(-50%,-50%) rotate(0)}to{transform:translate(-50%,-50%) rotate(360deg)}}
+.ending-dialog{
+    position:relative;z-index:5;width:min(640px,92vw);
+    background:rgba(10,15,35,0.92);border:2px solid rgba(180,120,255,0.45);
+    border-radius:18px;padding:20px 24px 16px;margin-top:34vh;
+    box-shadow:0 0 60px rgba(150,90,255,0.35);animation:endingDialogIn 0.5s ease-out;
+}
+@keyframes endingDialogIn{0%{opacity:0;transform:translateY(24px)}100%{opacity:1;transform:translateY(0)}}
+.ending-speaker{
+    font-size:0.95em;font-weight:bold;color:#D8B4FE;margin-bottom:8px;
+    display:flex;align-items:center;gap:8px;
+}
+.ending-speaker-avatar{font-size:1.3em}
+.ending-text{
+    font-size:1.06em;color:#F3E8FF;line-height:1.7;min-height:60px;
+    white-space:pre-wrap;letter-spacing:0.3px;
+}
+.ending-cursor{display:inline-block;width:2px;height:1.1em;background:#D8B4FE;vertical-align:-2px;animation:endingBlink 0.7s step-end infinite}
+@keyframes endingBlink{0%,100%{opacity:1}50%{opacity:0}}
+.ending-choices{display:flex;gap:14px;justify-content:center;margin-top:18px}
+.ending-choice-btn{
+    padding:12px 30px;border:none;border-radius:14px;cursor:pointer;
+    font-size:1em;font-weight:bold;font-family:inherit;color:#fff;transition:all 0.2s;
+    background:linear-gradient(135deg,#7C4DFF,#4A148C);
+    box-shadow:0 4px 18px rgba(124,77,255,0.4);
+}
+.ending-choice-btn:hover{transform:translateY(-3px);box-shadow:0 8px 28px rgba(124,77,255,0.6)}
+.ending-choice-btn:active{transform:scale(0.95)}
+.ending-choice-btn.danger{background:linear-gradient(135deg,#EF5350,#B71C1C);box-shadow:0 4px 18px rgba(239,83,80,0.4)}
+.ending-choice-btn.danger:hover{box-shadow:0 8px 28px rgba(239,83,80,0.6)}
+.ending-next-btn{
+    margin-top:14px;padding:9px 26px;border:none;border-radius:12px;cursor:pointer;
+    font-size:0.92em;font-weight:bold;font-family:inherit;color:#0a0f1f;
+    background:linear-gradient(135deg,#E1BEE7,#CE93D8);transition:all 0.2s;
+    box-shadow:0 3px 14px rgba(206,147,216,0.35);
+}
+.ending-next-btn:hover{transform:translateY(-2px);box-shadow:0 6px 22px rgba(206,147,216,0.55)}
+.ending-next-btn:active{transform:scale(0.95)}
+.ending-skip-btn{
+    margin-top:14px;margin-left:10px;padding:9px 20px;border:1px solid rgba(255,255,255,0.25);
+    border-radius:12px;cursor:pointer;
+    font-size:0.85em;font-family:inherit;color:rgba(255,255,255,0.75);
+    background:rgba(255,255,255,0.06);transition:all 0.2s;
+}
+.ending-skip-btn:hover{background:rgba(255,255,255,0.14);color:#fff}
+.ending-skip-btn:active{transform:scale(0.95)}
+
+/* ============ Boss 战斗（青蛙精） ============ */
+.battle-overlay{
+    position:fixed;top:0;left:0;width:100%;height:100%;
+    background:linear-gradient(180deg,#0b1030 0%,#12265a 55%,#0a3550 100%);
+    display:none;justify-content:center;align-items:center;
+    z-index:2300;flex-direction:column;
+}
+.battle-overlay.active{display:flex}
+.battle-canvas{position:absolute;top:0;left:0;width:100%;height:100%;display:block}
+.battle-hud{
+    position:absolute;top:0;left:0;width:100%;padding:14px 20px;
+    display:flex;flex-direction:column;gap:8px;z-index:5;pointer-events:none;
+}
+.battle-hp-row{display:flex;align-items:center;gap:10px}
+.battle-hp-name{font-size:0.82em;font-weight:bold;color:#FFD700;min-width:60px;text-shadow:0 0 8px rgba(255,215,0,0.5)}
+.battle-hp-name.enemy{color:#FF5252}
+.battle-hp-track{flex:1;height:14px;background:rgba(255,255,255,0.1);border-radius:7px;overflow:hidden;border:1px solid rgba(255,255,255,0.15)}
+.battle-hp-fill{height:100%;width:100%;border-radius:7px;transition:width 0.15s ease-out;background:linear-gradient(90deg,#4CAF50,#8BC34A)}
+.battle-hp-fill.enemy{background:linear-gradient(90deg,#FF5252,#FF8A80)}
+.battle-hp-fill.player{background:linear-gradient(90deg,#4FC3F7,#00E5FF)}
+.battle-hp-num{font-size:0.8em;color:#fff;min-width:56px;text-align:right}
+.battle-hp-fill.enemy.enraged{background:linear-gradient(90deg,#FF1744,#FF9100);animation:bossHpRage 0.6s ease-in-out infinite alternate}
+@keyframes bossHpRage{0%{filter:brightness(1)}100%{filter:brightness(1.6)}}
+.battle-phase-tag{color:#FF9100;font-size:0.8em;margin-left:6px;animation:bossPhaseTagBlink 0.8s ease-in-out infinite}
+@keyframes bossPhaseTagBlink{0%,100%{opacity:1}50%{opacity:0.4}}
+.battle-buff-row{
+    position:absolute;top:96px;left:50%;transform:translateX(-50%);
+    display:flex;gap:8px;z-index:6;pointer-events:none;
+}
+.battle-buff-chip{
+    padding:5px 14px;border-radius:16px;background:rgba(0,0,0,0.6);
+    border:1px solid rgba(255,255,255,0.25);color:#fff;
+    font-size:0.9em;font-weight:bold;white-space:nowrap;
+    animation:buffChipIn 0.25s ease-out;
+}
+@keyframes buffChipIn{0%{opacity:0;transform:scale(0.6)}100%{opacity:1;transform:scale(1)}}
+.battle-tip{
+    position:absolute;bottom:16px;left:50%;transform:translateX(-50%);
+    font-size:0.85em;color:rgba(255,255,255,0.8);text-shadow:0 0 6px rgba(0,0,0,0.7);
+    background:rgba(0,0,0,0.4);padding:6px 18px;border-radius:20px;z-index:5;
+    letter-spacing:0.5px;pointer-events:none;
+}
+.battle-phase-text{
+    position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+    font-size:2em;font-weight:bold;color:#FFD700;text-shadow:0 0 20px rgba(255,215,0,0.7);
+    animation:battlePhaseIn 0.4s ease-out;z-index:6;pointer-events:none;text-align:center;line-height:1.6;
+}
+@keyframes battlePhaseIn{0%{opacity:0;transform:translate(-50%,-50%) scale(1.6)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+
+/* ============ 结局画面 ============ */
+.ending-result-overlay{
+    position:fixed;top:0;left:0;width:100%;height:100%;
+    background:rgba(0,0,0,0.9);display:none;justify-content:center;align-items:center;
+    z-index:2400;flex-direction:column;
+}
+.ending-result-overlay.active{display:flex}
+.ending-result-card{
+    text-align:center;color:#fff;max-width:560px;width:90%;
+    background:linear-gradient(135deg,rgba(30,20,60,0.95),rgba(10,15,40,0.95));
+    border:2px solid rgba(180,120,255,0.5);border-radius:22px;padding:36px 32px;
+    box-shadow:0 0 80px rgba(150,90,255,0.4);animation:lcIn 0.6s ease-out;
+}
+.ending-result-card.bad{border-color:rgba(90,110,140,0.5);box-shadow:0 0 60px rgba(60,80,120,0.3)}
+.ending-result-icon{font-size:3.2em;margin-bottom:10px}
+.ending-result-title{font-size:1.5em;font-weight:bold;margin:12px 0;color:#D8B4FE}
+.ending-result-card.bad .ending-result-title{color:#90A4AE}
+.ending-result-detail{font-size:0.98em;color:#ccc;line-height:1.8;white-space:pre-line}
+.ending-result-btns{display:flex;gap:14px;margin-top:24px;justify-content:center;flex-wrap:wrap}
+
+</style>
+</head>
+<body>
+<div class="game-container">
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- 标题 -->
+    <div id="gameTitle">🎣 Next Bigger Catch</div>
+
+    <!-- 模式选择页 -->
+    <div class="mode-pick" id="modePick">
+        <div class="mp-title-wrap">
+            <div class="mp-title">🎣 下一条鱼会更大</div>
+            <div class="mp-sub">Next Bigger Catch</div>
+        </div>
+        <div class="mp-lore">
+            <p class="lore-line">在遥远的海域，有一位<span class="hl">独自生活在孤岛</span>上的少年</p>
+            <p class="lore-line">他每天无忧无虑地钓鱼、晒太阳，日子平静而快乐</p>
+            <p class="lore-line">直到某个夜晚，<span class="hl-pink">女神</span>托梦而来——</p>
+            <p class="lore-line">她将一只<span class="hl-green">魔力青蛙</span>交到少年手中：</p>
+            <p class="lore-line">"<span class="hl">赚够 100 万金币</span>，它就能进化为<span class="hl-pink">彩虹蛙</span>"</p>
+            <p class="lore-line">一只可以实现<span class="hl-blue">任何愿望</span>的传说之蛙……</p>
+            <div class="lore-divider"></div>
+            <p class="lore-line">少年登上小船，扬起风帆</p>
+            <p class="lore-line" style="font-weight:bold;color:#FFD700">轰轰烈烈的大钓鱼时代，就此开幕 🎣</p>
+        </div>
+        <div class="mp-cards">
+            <div class="mp-card mp-level" onclick="selectMode('level')">
+                <span class="mp-icon">🗺️</span>
+                <div class="mp-card-title">闯关模式</div>
+                <div class="mp-card-desc">10关循序渐进</div>
+                <div class="mp-card-features"><span>✓</span> 保底机制<br><span>✓</span> 道具商店<br><span>✓</span> 关卡奖励<br><span>✓</span> 打工系统</div>
+            </div>
+            <div class="mp-card mp-adv" onclick="selectMode('adventure')">
+                <span class="mp-icon">🌊</span>
+                <div class="mp-card-title">冒险模式</div>
+                <div class="mp-card-desc">乘船出航100天赚100万</div>
+                <div class="mp-card-features"><span>⚠</span> 无保底<br><span>⚠</span> 每日结算<br><span>⚠</span> 危险值系统<br><span>⚠</span> 天灾事件</div>
+            </div>
+        </div>
+        <div class="mp-frog-status">🐸 <span id="mpFrogLv">青蛙 Lv.1</span> · <span id="mpFrogRate">成功率 60%</span></div>
+        <div style="margin-top:15px;display:flex;gap:10px;justify-content:center">
+            <button class="gacha-btn btn-sell" onclick="saveGame()" style="font-size:0.8em!important;padding:6px 20px!important">💾 存档</button>
+            <button class="gacha-btn btn-sell" onclick="openDevMode()" style="font-size:0.8em!important;padding:6px 20px!important;border-color:rgba(231,76,60,0.5)!important">🔧 DEV</button>
+        </div>
+    </div>
+
+    <!-- 游戏顶栏 (钓鱼模式 - 统一HUD) -->
+    <div class="game-topbar hidden" id="gameUI">
+        <div class="gtb-left">
+            <button class="gtb-btn-back" id="menuBackBtn" onclick="exitToMenu()">🏠</button>
+            <span class="gtb-title" id="gtbModeTitle">🎣</span>
+        </div>
+        <div class="gtb-right">
+            <div class="gtb-stat">💰 <span id="hudCoins">500</span></div>
+            <div class="gtb-stat">🎣<span id="hudPulls">0</span>次</div>
+            <div class="gtb-frog" id="frogInfo">
+                <div class="gtb-frog-top">
+                    <span class="gtb-frog-lv" id="frogLvTxt">Lv.1</span>
+                    <span class="gtb-frog-rate" id="frogRateTxt">60%</span>
+                </div>
+                <div class="gtb-frog-xp"><div class="gtb-frog-xp-bar" id="frogLvBar" style="width:0%"></div></div>
+            </div>
+            <button class="gtb-btn" id="bgmToggle" onclick="toggleBGM()">🔊</button>
+            <button class="gtb-btn" id="pauseBtn" onclick="togglePause()">⏸️</button>
+        </div>
+    </div>
+
+    <!-- 保底计数 -->
+    <div class="pity-display" id="pityDisplay">
+        <div class="pity-item">⭐4 保底 <span id="pity4">10</span></div>
+        <div class="pity-item">🌈5 保底 <span id="pity5">90</span></div>
+    </div>
+    <!-- 活跃buff -->
+    <div class="hud-buffs" id="hudBuffs" style="position:absolute;top:44px;left:50%;transform:translateX(-50%);z-index:101;font-size:0.75em;color:#FF80C0;pointer-events:none;white-space:nowrap;text-shadow:0 0 10px rgba(255,100,150,0.6);"></div>
+
+    <!-- 关卡指示器 -->
+    <div class="level-indicator" id="levelIndicator">
+        <span id="liNum" style="color:#FFD700;font-weight:bold;">第1关</span>
+        <span id="liName" style="color:#fff;">初出茅庐</span>
+        <span id="liDesc" style="color:#aaa;font-size:0.7em;"></span>
+        <span style="color:#aaa;font-size:0.8em;">目标: <span id="levelProgress" style="color:#4FC3F7;font-weight:bold;">0/3</span></span>
+        <span style="color:#888;font-size:0.75em;">剩余: <span id="levelCasts" style="color:#FF9800;">0/8</span></span>
+    </div>
+
+    <!-- 冒险模式统一HUD（天数/危险/收益一体化） -->
+    <div class="fishing-hud" id="fishingHud">
+        <div class="fh-bar">
+            <div class="fh-cell fh-day-cell" id="fhDay">☀️ 第 1/100 天</div>
+            <div class="fh-danger">
+                <span class="fh-danger-label">⚠</span>
+                <div class="fh-danger-bar-wrap"><div class="fh-danger-bar-fill" id="fhDangerBar" style="width:0%"></div></div>
+                <span class="fh-danger-pct" id="fhDangerPct">0%</span>
+            </div>
+            <div class="fh-cell">💰 <span id="fhTodayEarned">0</span></div>
+            <div class="fh-cell">🎒 <span id="fhBagCount">0</span></div>
+            <div class="fh-cell">🎣 <span id="fhDayCasts">0</span>/<span id="fhMaxCasts">20</span></div>
+            <div class="fh-cell">x<span id="fhMultiplier">1.0</span></div>
+        </div>
+        <div class="fh-actions">
+            <button class="fh-btn fh-btn-home" id="fhBtnHome" onclick="returnHome()">🏝️ 回家休整</button>
+            <button class="fh-btn fh-btn-quit" id="fhBtnQuit" onclick="advQuit()">🚪 退出</button>
+        </div>
+    </div>
+
+    <!-- 冒险结算（胜利/失败时显示） -->
+
+    <!-- 底部按钮区 -->
+    <div class="bottom-bar" id="bottomBar">
+        <button class="gacha-btn btn-single" id="btnSingle" onclick="doPull(1)">🎣 垂钓 · 100💰</button>
+        <button class="gacha-btn btn-ten" id="btnTen" onclick="doPull(10)" style="display:none">✨ 十连 · 900💰</button>
+        <button class="gacha-btn btn-sell" id="btnSell" onclick="sellAll()">💵 卖鱼换钱</button>
+        <button class="gacha-btn btn-album" id="btnAlbum" onclick="toggleAlbum()">📖 图鉴</button>
+        <button class="gacha-btn btn-shop" id="btnShop" onclick="toggleItemShop()">🎒 道具</button>
+        <button class="gacha-btn btn-frog-upgrade" id="btnFrogUpgrade" onclick="upgradeFrog()" style="display:none">🐸 升级青蛙</button>
+        <button class="gacha-btn btn-dive" id="btnDive" onclick="startDive()" style="display:none">🤿 潜水寻宝</button>
+    </div>
+
+    <!-- 大鱼揭示弹窗（单抽用） -->
+    <div class="reveal-overlay" id="revealOverlay">
+        <div class="reveal-card" id="revealCard">
+            <span class="rv-emoji" id="rvEmoji"></span>
+            <div class="rv-name" id="rvName"></div>
+            <div class="rv-stars" id="rvStars"></div>
+            <div class="rv-weight" id="rvWeight"></div>
+            <div class="rv-value" id="rvValue"></div>
+            <div class="rv-new" id="rvNew" style="display:none">NEW!</div>
+            <div class="rv-zone" id="rvZone" style="font-size:0.8em;color:#aaa;margin-top:4px"></div>
+            <div style="margin-top:16px">
+                <button class="gacha-btn btn-single" onclick="closeReveal()" style="font-size:0.9em">确认</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 十连结果 -->
+    <div class="results-overlay" id="resultsOverlay">
+        <div style="color:#FFD700;font-size:1.2em;font-weight:bold">✨ 十连结果 ✨</div>
+        <div class="results-grid" id="resultsGrid"></div>
+        <button class="gacha-btn btn-single" onclick="closeResults()">确认</button>
+    </div>
+
+    <!-- 图鉴 -->
+    <div class="album-overlay" id="albumOverlay">
+        <div class="album-content">
+            <div class="album-title">📖 鱼类图鉴</div>
+            <div class="album-progress">收集进度: <span id="albumProgress">0/21</span></div>
+            <div class="album-grid" id="albumGrid"></div>
+            <div style="text-align:center;margin-top:18px" class="album-close">
+                <button class="gacha-btn btn-sell" onclick="toggleAlbum()">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 提示 toast -->
+    <div class="toast" id="toast"></div>
+
+    <!-- 关卡通关弹窗 -->
+    <div class="level-complete-overlay" id="levelCompleteOverlay">
+        <div class="lc-card">
+            <div class="lc-stars" id="lcStars">⭐⭐⭐</div>
+            <div class="lc-title" id="lcTitle">🎉 通关！</div>
+            <div class="lc-caught" id="lcCaught">钓获: 0条</div>
+            <div class="lc-reward" id="lcReward">奖励: 200 💰</div>
+            <button class="gacha-btn btn-ten" onclick="nextLevel()" style="margin-top:16px;font-size:1.1em;">▶ 下一关</button>
+        </div>
+    </div>
+
+    <!-- 道具商店 -->
+    <div class="item-shop-overlay" id="itemShopOverlay">
+        <div class="shop-content">
+            <div class="shop-title">🎒 策略道具</div>
+            <div class="shop-coins">💰 <span id="isCoins">500</span></div>
+            <div class="shop-item" id="shopIT_flash">
+                <div class="shop-item-icon">💣</div>
+                <div class="shop-item-info">
+                    <div class="shop-item-name">闪光弹</div>
+                    <div class="shop-item-desc">揭示所有假钓点，持续4秒</div>
+                    <div class="shop-item-count"><span id="is_flash">x3</span> · 30💰</div>
+                </div>
+                <div class="shop-item-actions">
+                    <button class="shop-btn shop-btn-use" id="isUse_flash" onclick="useItem('flash')">使用</button>
+                    <button class="shop-btn shop-btn-buy" onclick="buyItem('flash')">购买</button>
+                </div>
+            </div>
+            <div class="shop-item" id="shopIT_accuracy">
+                <div class="shop-item-icon">🎯</div>
+                <div class="shop-item-info">
+                    <div class="shop-item-name">精准雷达</div>
+                    <div class="shop-item-desc">下一个钓点必定为真货</div>
+                    <div class="shop-item-count"><span id="is_accuracy">x1</span> · 50💰</div>
+                </div>
+                <div class="shop-item-actions">
+                    <button class="shop-btn shop-btn-use" id="isUse_accuracy" onclick="useItem('accuracy')">使用</button>
+                    <button class="shop-btn shop-btn-buy" onclick="buyItem('accuracy')">购买</button>
+                </div>
+            </div>
+            <div class="shop-item" id="shopIT_lucky">
+                <div class="shop-item-icon">🍀</div>
+                <div class="shop-item-info">
+                    <div class="shop-item-name">强化香饵</div>
+                    <div class="shop-item-desc">接下来3次钓鱼稀有度+1级</div>
+                    <div class="shop-item-count"><span id="is_lucky">x1</span> · 80💰</div>
+                </div>
+                <div class="shop-item-actions">
+                    <button class="shop-btn shop-btn-use" id="isUse_lucky" onclick="useItem('lucky')">使用</button>
+                    <button class="shop-btn shop-btn-buy" onclick="buyItem('lucky')">购买</button>
+                </div>
+            </div>
+            <div class="shop-item" id="shopIT_sandglass">
+                <div class="shop-item-icon">⏰</div>
+                <div class="shop-item-info">
+                    <div class="shop-item-name">延时沙漏</div>
+                    <div class="shop-item-desc">当前关卡增加2次钓点机会</div>
+                    <div class="shop-item-count"><span id="is_sandglass">x1</span> · 40💰</div>
+                </div>
+                <div class="shop-item-actions">
+                    <button class="shop-btn shop-btn-use" id="isUse_sandglass" onclick="useItem('sandglass')">增加+2</button>
+                    <button class="shop-btn shop-btn-buy" onclick="buyItem('sandglass')">购买</button>
+                </div>
+            </div>
+            <div class="shop-item" id="shopIT_refresh">
+                <div class="shop-item-icon">🐟</div>
+                <div class="shop-item-info">
+                    <div class="shop-item-name">呼唤鱼群</div>
+                    <div class="shop-item-desc">立即刷新所有钓点</div>
+                    <div class="shop-item-count"><span id="is_refresh">x1</span> · 20💰</div>
+                </div>
+                <div class="shop-item-actions">
+                    <button class="shop-btn shop-btn-use" id="isUse_refresh" onclick="useItem('refresh')">刷新</button>
+                    <button class="shop-btn shop-btn-buy" onclick="buyItem('refresh')">购买</button>
+                </div>
+            </div>
+            <div style="text-align:center;margin-top:16px">
+                <button class="gacha-btn btn-sell" onclick="toggleItemShop()">关闭</button>
+            </div>
+        </div>
+    </div>
+
+
+
+    <!-- 冒险模式结算 -->
+    <div class="adv-result-overlay" id="advResultOverlay">
+        <div class="adv-result-card">
+            <div class="adv-result-title" id="advResultTitle"></div>
+            <div class="adv-result-detail" id="advResultDetail"></div>
+            <div class="adv-result-btns">
+                <button class="gacha-btn btn-single" onclick="advRestart()">🔄 再试一次</button>
+                <button class="gacha-btn btn-sell" onclick="advQuit()">🏠 返回主菜单</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 潜水寻宝小游戏 -->
+    <div class="poseidon-overlay" id="poseidonOverlay">
+        <div class="poseidon-card">
+            <div class="poseidon-avatar">
+                <div class="poseidon-head">
+                    <div class="poseidon-face">
+                        <div class="poseidon-eye-l"></div>
+                        <div class="poseidon-eye-r"></div>
+                        <div class="poseidon-beard"></div>
+                    </div>
+                    <div class="poseidon-crown">
+                        <div class="crown-spike"></div>
+                        <div class="crown-spike main"></div>
+                        <div class="crown-spike"></div>
+                    </div>
+                </div>
+                <div class="poseidon-trident">🔱</div>
+                <div class="poseidon-waves">
+                    <span>🌊</span><span>🌊</span><span>🌊</span>
+                </div>
+            </div>
+            <div class="poseidon-title">海神波塞冬出现了！</div>
+            <div class="poseidon-desc">答对他的脑筋急转弯，就能获得丰厚奖励</div>
+            <div class="poseidon-question" id="poseidonQuestion"></div>
+            <div class="poseidon-options" id="poseidonOptions">
+                <button class="poseidon-btn" onclick="poseidonAnswer(this._answer)"></button>
+                <button class="poseidon-btn" onclick="poseidonAnswer(this._answer)"></button>
+                <button class="poseidon-btn" onclick="poseidonAnswer(this._answer)"></button>
+            </div>
+        </div>
+    </div>
+    <!-- 暂停覆盖层（PVZ风格） -->
+    <div class="pause-overlay" id="pauseOverlay">
+        <div class="pause-panel">
+            <span class="pause-icon" id="pauseIcon">🎣</span>
+            <div class="pause-title">游戏暂停</div>
+            <div class="pause-subtitle">—— 休息片刻 ——</div>
+            <div class="pause-btn-list">
+                <button class="pause-btn primary" onclick="togglePause()">▶ 继续游戏</button>
+                <button class="pause-btn danger" onclick="exitToMenu()">🚪 返回主菜单</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新手教程覆盖层 -->
+    <div class="tutorial-overlay" id="tutorialOverlay">
+        <div class="tutorial-card">
+            <div class="tutorial-step-indicator" id="tutorialStepIndicator"></div>
+            <div class="tutorial-icon" id="tutorialIcon">🐸</div>
+            <div class="tutorial-title" id="tutorialTitle">欢迎来到钓鱼世界！</div>
+            <div class="tutorial-desc" id="tutorialDesc"></div>
+            <div class="tutorial-hint" id="tutorialHint" style="display:none"></div>
+            <div class="tutorial-btns">
+                <button class="gacha-btn btn-sell" onclick="skipTutorial()" style="font-size:0.8em!important;padding:8px 16px!important">跳过教程</button>
+                <button class="gacha-btn btn-single" id="tutorialNextBtn" onclick="nextTutorial()" style="font-size:0.9em!important">下一步 ➡️</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 岛屿休整覆盖层 -->
+    <div class="island-overlay" id="islandOverlay">
+        <!-- 右上角数字时钟 -->
+        <div class="island-clock" id="islandClock">12:00</div>
+        
+        <!-- 时间暂停徽章 -->
+        <div class="island-time-stop" id="islandTimeStop">⏸ 时间已暂停</div>
+        
+        <!-- 右上角关闭按钮 -->
+        <div class="island-close-btn" onclick="closeIsland()">✕ 回到船上</div>
+        
+        <!-- 左上角信息卡 -->
+        <div class="island-info">
+            <div class="island-info-day">📅 第 <span id="islandDay">1</span> 天 · <span id="islandTimeOfDay">☀️ 正午</span></div>
+            <div class="island-info-coins">💰 <span id="islandCoins">500</span></div>
+            <div class="island-info-bag">🎒 背包: <span id="islandBagCount">0</span> 条鱼</div>
+        </div>
+        
+        <!-- 中间两大操作按钮 -->
+        <div class="island-actions">
+            <button class="island-act-btn" id="islandActPlant" onclick="switchIslandTab('plant')">
+                <span class="island-act-icon">🌱</span>
+                <span class="island-act-label">种 菜</span>
+                <span class="island-act-badge" id="islandPlantBadge" style="background:rgba(34,197,94,0.7)">0</span>
+            </button>
+            <button class="island-act-btn" id="islandActFishPlant" onclick="switchIslandTab('fishplant')">
+                <span class="island-act-icon">🐠</span>
+                <span class="island-act-label">种 鱼</span>
+                <span class="island-act-lock" id="islandFishLock">🔒</span>
+            </button>
+        </div>
+        
+        <!-- 底部详情面板 -->
+        <div class="island-detail" id="islandDetail">
+            <div class="island-detail-tabs">
+                <div class="island-dt-title" id="islandDetailTitle">🌱 种菜</div>
+                <div class="island-dt-close" onclick="switchIslandTab('')">✕</div>
+            </div>
+            
+            <!-- 种菜面板 -->
+            <div class="island-panel hidden" id="panelPlant">
+                <div class="island-plant-info">🌱 在岛上种菜，休息后收获利润！（成熟需 2 天）</div>
+                <div class="plant-slots" id="plantSlots"></div>
+            </div>
+            
+            <!-- 种鱼面板 -->
+            <div class="island-panel hidden" id="panelFishPlant">
+                <div class="island-plant-info" id="fishPlantInfo">🐠 消耗金币和鱼苗，休息后收获稀有鱼！<br><span style="color:#FF9800;font-size:0.85em">🔒 答对海神的谜题后解锁</span></div>
+                <div class="plant-slots" id="fishPlantSlots"></div>
+            </div>
+        </div>
+        
+        <!-- 底部操作栏 -->
+        <div class="island-bottom-bar">
+            <button class="island-main-btn island-btn-rest" onclick="restAndNextDay()">😴 休息 · 进入下一天</button>
+        </div>
+    </div>
+
+    <div class="dive-overlay" id="diveOverlay">
+        <div class="dive-card">
+            <div class="dive-title" id="diveTitle">🤿 潜水寻宝</div>
+            <div class="dive-subtitle" id="diveSubtitle">点击海底宝藏收集金币💎</div>
+            <div class="dive-round" id="diveTimer">⏱️ 15秒</div>
+            <div class="dive-area" id="diveArea"></div>
+            <div class="dive-earned" id="diveEarned"></div>
+            <div style="margin-top:16px">
+                <button class="gacha-btn btn-sell dive-close-btn" id="diveCloseBtn" onclick="closeDive()" style="display:none">✅ 上浮收宝</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 结局剧情（彩虹蛙进化 → 女神出现） -->
+    <div class="ending-overlay" id="endingOverlay">
+        <div class="ending-scene" id="endingScene">
+            <div class="ending-glow"></div>
+            <div class="ending-rainbow-ring"></div>
+            <div class="ending-frog" id="endingFrogEmoji">🐸</div>
+        </div>
+        <div class="ending-dialog">
+            <div class="ending-speaker"><span class="ending-speaker-avatar" id="endingSpeakerAvatar">🧚</span><span id="endingSpeaker">女神</span></div>
+            <div class="ending-text" id="endingText"></div>
+            <div class="ending-choices" id="endingChoices"></div>
+            <div style="text-align:center">
+                <button class="ending-next-btn" id="endingNextBtn" onclick="endingNext()">继续 ▶</button>
+                <button class="ending-skip-btn" id="endingSkipBtn" onclick="endingSkip()">⏩ 跳过剧情</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Boss 战斗（青蛙精） -->
+    <div class="battle-overlay" id="battleOverlay">
+        <canvas class="battle-canvas" id="battleCanvas"></canvas>
+        <div class="battle-hud">
+            <div class="battle-hp-row">
+                <span class="battle-hp-name enemy">👾 青蛙精<span id="bossPhaseTag"></span></span>
+                <div class="battle-hp-track"><div class="battle-hp-fill enemy" id="bossHpFill"></div></div>
+                <span class="battle-hp-num" id="bossHpNum"></span>
+            </div>
+            <div class="battle-hp-row">
+                <span class="battle-hp-name">🐸 你</span>
+                <div class="battle-hp-track"><div class="battle-hp-fill player" id="playerHpFill"></div></div>
+                <span class="battle-hp-num" id="playerHpNum"></span>
+            </div>
+        </div>
+        <div class="battle-buff-row" id="battleBuffRow" style="display:none"></div>
+        <div class="battle-tip">WASD / 方向键 移动 · 空格或点击 舌头攻击 · 拾取场上增益道具</div>
+        <div class="battle-phase-text" id="battlePhaseText" style="display:none"></div>
+        <button class="battle-exit-btn" id="battleExitBtn" onclick="battleExit()" style="display:none">🏳️ 退出战斗</button>
+    </div>
+
+    <!-- 结局画面 -->
+    <div class="ending-result-overlay" id="endingResultOverlay">
+        <div class="ending-result-card" id="endingResultCard">
+            <div class="ending-result-icon" id="endingResultIcon">🐸</div>
+            <div class="ending-result-title" id="endingResultTitle"></div>
+            <div class="ending-result-detail" id="endingResultDetail"></div>
+            <div class="ending-result-btns">
+                <button class="gacha-btn btn-single" id="endingResultMainBtn" onclick="endingResultContinue()">继续</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- DEV 开发者模式 -->
+    <div class="dev-overlay" id="devOverlay">
+        <div class="dev-panel">
+            <div class="dev-title">🔧 DEV 开发者模式</div>
+            <div class="dev-desc">测试专用 · 不影响正式流程</div>
+            <button class="dev-btn dev-btn-main" onclick="devStartBoss()">⚔️ 直接开始 BOSS 战</button>
+            <button class="dev-btn" onclick="devStartEnding()">🎬 测试最终剧情</button>
+            <button class="dev-btn" onclick="devAddCoins()">💰 立刻获得100万</button>
+            <button class="dev-btn" onclick="devReplayTutorial()">📖 新手教程回顾</button>
+            <div class="dev-desc" style="margin-top:4px">🐸 青蛙等级：<span id="devFrogLvTxt">Lv.1</span></div>
+            <div class="dev-lv-row">
+                <button class="dev-btn dev-lv" onclick="devSetFrogLv(1)">Lv.1</button>
+                <button class="dev-btn dev-lv" onclick="devSetFrogLv(2)">Lv.2</button>
+                <button class="dev-btn dev-lv" onclick="devSetFrogLv(3)">Lv.3</button>
+                <button class="dev-btn dev-lv" onclick="devSetFrogLv(4)">Lv.4</button>
+                <button class="dev-btn dev-lv dev-lv-max" onclick="devSetFrogLv(5)">Lv.5</button>
+            </div>
+            <button class="dev-btn dev-btn-close" onclick="devClose()">✖ 关闭</button>
+        </div>
+    </div>
+    </div>
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>
