@@ -28,6 +28,48 @@ body{
     display:block;
 }
 
+/* 全局目标 HUD（100天内赚100万）：常驻小窗 · 可拖拽移动 */
+#goalHud{
+    position:fixed;right:12px;bottom:74px;z-index:1800;display:flex;
+    flex-direction:column;align-items:center;gap:3px;
+    text-align:center;white-space:nowrap;
+    padding:9px 16px 11px;border-radius:16px;
+    background:rgba(6,12,24,.82);border:1px solid rgba(79,195,247,.35);
+    backdrop-filter:blur(5px);
+    box-shadow:0 8px 26px rgba(0,0,0,.55),inset 0 0 0 1px rgba(255,255,255,.03);
+    pointer-events:auto;cursor:grab;touch-action:none;user-select:none;
+}
+#goalHud.dragging{cursor:grabbing;opacity:.92}
+#goalHud .gh-day{
+    font-size:clamp(14px,2vh,18px);font-weight:bold;color:#FFD700;
+    text-shadow:0 0 14px rgba(255,215,0,.5),0 2px 4px rgba(0,0,0,.85);
+    letter-spacing:.5px;line-height:1.1;
+}
+#goalHud .gh-day .warn{color:#FF5A5A;animation:ghBlink .9s infinite}
+#goalHud .gh-earn{
+    font-size:clamp(12px,1.7vh,15px);font-weight:bold;color:#fff;
+    text-shadow:0 0 10px rgba(255,255,255,.25),0 2px 3px rgba(0,0,0,.9);
+    line-height:1.2;
+}
+#goalHud .gh-earn .left{color:#4FC3F7}
+#goalHud .gh-earn .prog{color:#9FE6A0}
+#goalHud .gh-bar{width:min(200px,42vw);height:6px;background:rgba(255,255,255,.14);border-radius:4px;overflow:hidden;margin-top:3px;box-shadow:inset 0 1px 3px rgba(0,0,0,.5)}
+#goalHud .gh-bar-fill{height:100%;background:linear-gradient(90deg,#4FC3F7,#FFD700 60%,#66BB6A);border-radius:4px;transition:width .35s ease}
+#goalHud .gh-progress-txt{font-size:clamp(11px,1.6vh,14px);font-weight:bold;color:rgba(255,255,255,.92);text-shadow:0 1px 2px rgba(0,0,0,.9)}
+#goalHud .gh-progress-txt .left{color:#4FC3F7}
+@keyframes ghBlink{0%,100%{opacity:1}50%{opacity:.2}}
+
+/* 全局目标结算（100万达成 / 100天到期） */
+#goalOverlay{position:fixed;inset:0;z-index:130;display:none;align-items:center;justify-content:center;background:rgba(4,9,18,.74);backdrop-filter:blur(3px)}
+#goalOverlay.active{display:flex}
+#goalOverlay .goal-card{max-width:min(90vw,430px);width:100%;background:linear-gradient(160deg,#1c2c4e,#0c1426);border:2px solid rgba(255,215,0,.4);border-radius:20px;padding:30px 22px;text-align:center;box-shadow:0 0 46px rgba(255,215,0,.18)}
+#goalOverlay .goal-emoji{font-size:66px;margin-bottom:6px;line-height:1.2}
+#goalOverlay .goal-title{font-size:clamp(20px,2.6vh,27px);font-weight:bold;color:#FFD700;margin-bottom:10px;text-shadow:0 2px 6px rgba(0,0,0,.6)}
+#goalOverlay .goal-sub{font-size:15px;color:rgba(255,255,255,.88);line-height:1.7;margin-bottom:14px}
+#goalOverlay .goal-stats{font-size:13px;color:rgba(255,255,255,.55);margin-bottom:20px}
+#goalOverlay .goal-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+#goalOverlay .goal-btns .gacha-btn{font-size:15px;padding:10px 18px;border-radius:12px;cursor:pointer}
+
 /* ===== 游戏顶栏 (钓鱼模式) ===== */
 .game-topbar{
     position:fixed;
@@ -350,8 +392,14 @@ body{
 .shop-content{
     background:linear-gradient(180deg,#1e2d3d,#0f1a24);
     border-radius:16px;padding:24px;max-width:420px;width:90%;
+    max-height:84vh;overflow-y:auto;
     color:#fff;border:2px solid rgba(255,180,40,0.3);
     box-shadow:0 0 50px rgba(255,150,20,0.2);
+}
+.shop-tag-adv{
+    display:inline-block;font-size:0.62em;font-weight:bold;vertical-align:middle;
+    padding:1px 6px;margin-left:4px;border-radius:6px;
+    background:rgba(79,195,247,0.18);border:1px solid rgba(79,195,247,0.45);color:#7fd3ff;
 }
 .shop-title{text-align:center;font-size:1.3em;color:#FFD700;margin-bottom:6px}
 .shop-coins{text-align:center;font-size:1em;color:#f39c12;margin-bottom:16px;font-weight:bold}
@@ -534,7 +582,55 @@ body{
 .mp-card-features span{color:#FFD700}
 .mp-frog-status{margin-top:35px;padding:12px 24px;border-radius:14px;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.1);text-align:center;color:#ccc;font-size:0.85em}
 
-/* DEV 开发者模式 */
+/* 闯关模式：选关页 */
+.level-select-overlay{
+    position:fixed;inset:0;z-index:1050;display:none;
+    align-items:center;justify-content:center;flex-direction:column;
+    background:linear-gradient(180deg,#0a1628,#0d2137,#0a1a30);
+    padding:20px;
+}
+.level-select-overlay.active{display:flex}
+.ls-panel{
+    width:min(980px,96vw);max-height:92vh;
+    display:flex;flex-direction:column;gap:14px;
+    background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);
+    border-radius:22px;padding:22px 24px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5);
+}
+.ls-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ls-title{font-size:1.5em;font-weight:bold;color:#FFD700;text-shadow:0 0 18px rgba(255,215,0,.3)}
+.ls-sub{font-size:0.9em;color:#aaa;margin-top:3px}
+.ls-back{
+    padding:8px 18px;border-radius:12px;cursor:pointer;font-family:inherit;
+    background:rgba(255,255,255,0.08);color:#fff;border:1px solid rgba(255,255,255,0.2);
+    font-weight:bold;transition:all 0.2s;
+}
+.ls-back:hover{background:rgba(255,255,255,0.16)}
+.ls-grid{
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));
+    gap:10px;overflow-y:auto;padding:4px;
+}
+.ls-tile{
+    position:relative;cursor:pointer;user-select:none;
+    background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);
+    border-radius:12px;padding:10px 4px 8px;text-align:center;
+    transition:all 0.15s;color:#fff;
+}
+.ls-tile:hover{transform:translateY(-3px);background:rgba(255,255,255,0.1)}
+.ls-tile .t-flag{position:absolute;top:4px;right:7px;font-size:0.85em;color:#8bc34a}
+.ls-tile .t-num{font-size:1.1em;font-weight:bold;color:#4FC3F7}
+.ls-tile .t-name{font-size:0.62em;color:#aaa;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ls-tile.current{border-color:rgba(255,215,0,.75);background:rgba(255,215,0,.12);box-shadow:0 0 16px rgba(255,215,0,.25)}
+.ls-tile.current .t-num{color:#FFD700}
+.ls-tile.current .t-flag{color:#FFD700}
+.ls-tile.cleared{background:rgba(76,175,80,.12);border-color:rgba(76,175,80,.35)}
+.ls-tile.cleared .t-num{color:#9FE6A0}
+.ls-tile.locked{cursor:not-allowed;opacity:.45;background:rgba(255,255,255,0.03)}
+.ls-tile.locked .t-num{color:#888}
+.ls-tile.locked .t-flag{color:#999}
+.ls-foot{font-size:0.75em;color:#888;text-align:center}
+
+/* 开发者作弊模式 */
 .dev-overlay{position:fixed;inset:0;z-index:300;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.72);backdrop-filter:blur(4px)}
 .dev-overlay.active{display:flex}
 .dev-panel{width:min(380px,90vw);padding:28px 26px;border-radius:20px;background:linear-gradient(160deg,#1a2332,#0f1522);border:1px solid rgba(255,215,0,0.35);box-shadow:0 20px 60px rgba(0,0,0,0.6);text-align:center;display:flex;flex-direction:column;gap:12px}
@@ -545,6 +641,8 @@ body{
 .dev-btn-main{border-color:rgba(231,76,60,0.6);background:rgba(231,76,60,0.22)}
 .dev-btn-main:hover{background:rgba(231,76,60,0.38);box-shadow:0 6px 24px rgba(231,76,60,0.3)}
 .dev-btn-close{margin-top:6px;border-color:transparent;background:rgba(255,255,255,0.04);color:#888}
+.dev-btn-danger{border-color:rgba(200,40,40,0.75);background:rgba(160,25,25,0.5);color:#ffd9d9;font-weight:bold}
+.dev-btn-danger:hover{background:rgba(210,40,40,0.7);box-shadow:0 6px 24px rgba(200,40,40,0.35)}
 .dev-lv-row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
 .dev-lv{flex:1;min-width:52px;padding:10px 8px;font-size:0.85em}
 .dev-lv-max{border-color:rgba(255,215,0,0.5);background:rgba(255,215,0,0.15)}
@@ -1164,6 +1262,27 @@ body{
 .ending-result-detail{font-size:0.98em;color:#ccc;line-height:1.8;white-space:pre-line}
 .ending-result-btns{display:flex;gap:14px;margin-top:24px;justify-content:center;flex-wrap:wrap}
 
+/* 开场剧情（序章） */
+.intro-overlay{
+    position:fixed;inset:0;z-index:1500;display:none;
+    align-items:center;justify-content:center;
+    background:radial-gradient(circle at 50% 35%,#123a54 0%,#0a1a2b 55%,#040910 100%);
+    padding:24px;
+}
+.intro-overlay.active{display:flex}
+.intro-scene{
+    width:min(640px,94vw);
+    background:rgba(6,14,26,.86);border:1px solid rgba(255,215,0,.28);
+    border-radius:20px;padding:26px 26px 20px;text-align:center;
+    box-shadow:0 22px 60px rgba(0,0,0,.6);
+    color:#fff;
+}
+.intro-avatar{font-size:3.4em;line-height:1;margin-bottom:6px;filter:drop-shadow(0 0 18px rgba(255,215,0,.35))}
+.intro-speaker{font-size:1em;color:#FFD700;font-weight:bold;margin-bottom:10px;letter-spacing:1px}
+.intro-text{font-size:clamp(14px,2.1vh,17px);line-height:1.8;min-height:5.4em;color:#eaf4ff}
+.intro-dots{margin-top:10px;color:#FFD700;letter-spacing:5px;font-size:0.85em;opacity:.85}
+.intro-btns{display:flex;gap:12px;justify-content:center;margin-top:18px;flex-wrap:wrap}
+
 </style>
 </head>
 <body>
@@ -1191,23 +1310,38 @@ body{
             <p class="lore-line" style="font-weight:bold;color:#FFD700">轰轰烈烈的大钓鱼时代，就此开幕 🎣</p>
         </div>
         <div class="mp-cards">
-            <div class="mp-card mp-level" onclick="selectMode('level')">
+            <div class="mp-card mp-level" onclick="openLevelSelect()">
                 <span class="mp-icon">🗺️</span>
                 <div class="mp-card-title">闯关模式</div>
-                <div class="mp-card-desc">10关循序渐进</div>
-                <div class="mp-card-features"><span>✓</span> 保底机制<br><span>✓</span> 道具商店<br><span>✓</span> 关卡奖励<br><span>✓</span> 打工系统</div>
+                <div class="mp-card-desc">50关循序渐进 · 通关奖励合计80万</div>
+                <div class="mp-card-features"><span>✓</span> 稳扎稳打<br><span>✓</span> 每关固定奖励<br><span>✓</span> 道具教学<br><span>✓</span> 失败不亏钱</div>
             </div>
             <div class="mp-card mp-adv" onclick="selectMode('adventure')">
                 <span class="mp-icon">🌊</span>
                 <div class="mp-card-title">冒险模式</div>
-                <div class="mp-card-desc">乘船出航100天赚100万</div>
+                <div class="mp-card-desc">自由海钓 · 收益风险双高</div>
                 <div class="mp-card-features"><span>⚠</span> 无保底<br><span>⚠</span> 每日结算<br><span>⚠</span> 危险值系统<br><span>⚠</span> 天灾事件</div>
             </div>
         </div>
         <div class="mp-frog-status">🐸 <span id="mpFrogLv">青蛙 Lv.1</span> · <span id="mpFrogRate">成功率 60%</span></div>
         <div style="margin-top:15px;display:flex;gap:10px;justify-content:center">
             <button class="gacha-btn btn-sell" onclick="saveGame()" style="font-size:0.8em!important;padding:6px 20px!important">💾 存档</button>
-            <button class="gacha-btn btn-sell" onclick="openDevMode()" style="font-size:0.8em!important;padding:6px 20px!important;border-color:rgba(231,76,60,0.5)!important">🔧 DEV</button>
+            <button class="gacha-btn btn-sell" onclick="openDevMode()" style="font-size:0.8em!important;padding:6px 20px!important;border-color:rgba(231,76,60,0.5)!important">🔧 作弊模式</button>
+        </div>
+    </div>
+
+    <!-- 闯关模式：选关页 -->
+    <div class="level-select-overlay" id="levelSelectOverlay">
+        <div class="ls-panel">
+            <div class="ls-head">
+                <div>
+                    <div class="ls-title">🗺️ 选择关卡</div>
+                    <div class="ls-sub" id="lsProgressTxt">已通关 0 / 50</div>
+                </div>
+                <button class="ls-back" onclick="closeLevelSelect()">✖ 返回主菜单</button>
+            </div>
+            <div class="ls-grid" id="lsGrid"></div>
+            <div class="ls-foot">💡 绿色 = 已通关可重玩 · 金色高亮 = 当前进度 · 🔒 = 未解锁</div>
         </div>
     </div>
 
@@ -1227,9 +1361,18 @@ body{
                 </div>
                 <div class="gtb-frog-xp"><div class="gtb-frog-xp-bar" id="frogLvBar" style="width:0%"></div></div>
             </div>
+            <button class="gtb-btn" id="btnIsland" onclick="openIslandFromHome()" title="种鱼 / 岛屿">🏝️</button>
             <button class="gtb-btn" id="bgmToggle" onclick="toggleBGM()">🔊</button>
             <button class="gtb-btn" id="pauseBtn" onclick="togglePause()">⏸️</button>
         </div>
+    </div>
+
+    <!-- 全局目标（100天×100万）：常驻小窗，可拖拽 -->
+    <div id="goalHud">
+        <div class="gh-day" id="ghDay">⏳ 剩余 100 / 100 天</div>
+        <div class="gh-earn">💰 <span class="prog" id="ghEarned">0</span> / 1,000,000</div>
+        <div class="gh-bar"><div class="gh-bar-fill" id="ghBar" style="width:0%"></div></div>
+        <div class="gh-progress-txt" id="ghLeft">还差 <span class="left">1,000,000</span> 💰 达成 100 万</div>
     </div>
 
     <!-- 保底计数 -->
@@ -1275,7 +1418,6 @@ body{
     <div class="bottom-bar" id="bottomBar">
         <button class="gacha-btn btn-single" id="btnSingle" onclick="doPull(1)">🎣 垂钓 · 100💰</button>
         <button class="gacha-btn btn-ten" id="btnTen" onclick="doPull(10)" style="display:none">✨ 十连 · 900💰</button>
-        <button class="gacha-btn btn-sell" id="btnSell" onclick="sellAll()">💵 卖鱼换钱</button>
         <button class="gacha-btn btn-album" id="btnAlbum" onclick="toggleAlbum()">📖 图鉴</button>
         <button class="gacha-btn btn-shop" id="btnShop" onclick="toggleItemShop()">🎒 道具</button>
         <button class="gacha-btn btn-frog-upgrade" id="btnFrogUpgrade" onclick="upgradeFrog()" style="display:none">🐸 升级青蛙</button>
@@ -1394,6 +1536,66 @@ body{
                 <div class="shop-item-actions">
                     <button class="shop-btn shop-btn-use" id="isUse_refresh" onclick="useItem('refresh')">刷新</button>
                     <button class="shop-btn shop-btn-buy" onclick="buyItem('refresh')">购买</button>
+                </div>
+            </div>
+            <div class="shop-item" id="shopIT_oxygen">
+                <div class="shop-item-icon">🤿</div>
+                <div class="shop-item-info">
+                    <div class="shop-item-name">高压氧气瓶 <span class="shop-tag-adv">冒险</span></div>
+                    <div class="shop-item-desc">潜水时长+10秒；未潜水时恢复1次潜水机会</div>
+                    <div class="shop-item-count"><span id="is_oxygen">x1</span> · 60💰</div>
+                </div>
+                <div class="shop-item-actions">
+                    <button class="shop-btn shop-btn-use" id="isUse_oxygen" onclick="useItem('oxygen')">使用</button>
+                    <button class="shop-btn shop-btn-buy" onclick="buyItem('oxygen')">购买</button>
+                </div>
+            </div>
+            <div class="shop-item" id="shopIT_cloak">
+                <div class="shop-item-icon">☂️</div>
+                <div class="shop-item-info">
+                    <div class="shop-item-name">避风斗篷 <span class="shop-tag-adv">冒险</span></div>
+                    <div class="shop-item-desc">立刻平息当前灾难，并把危险值清零</div>
+                    <div class="shop-item-count"><span id="is_cloak">x0</span> · 120💰</div>
+                </div>
+                <div class="shop-item-actions">
+                    <button class="shop-btn shop-btn-use" id="isUse_cloak" onclick="useItem('cloak')">使用</button>
+                    <button class="shop-btn shop-btn-buy" onclick="buyItem('cloak')">购买</button>
+                </div>
+            </div>
+            <div class="shop-item" id="shopIT_compass">
+                <div class="shop-item-icon">🧭</div>
+                <div class="shop-item-info">
+                    <div class="shop-item-name">寻宝罗盘 <span class="shop-tag-adv">冒险</span></div>
+                    <div class="shop-item-desc">立即在水面刷出2处隐藏宝藏（舌头拾取）</div>
+                    <div class="shop-item-count"><span id="is_compass">x0</span> · 70💰</div>
+                </div>
+                <div class="shop-item-actions">
+                    <button class="shop-btn shop-btn-use" id="isUse_compass" onclick="useItem('compass')">使用</button>
+                    <button class="shop-btn shop-btn-buy" onclick="buyItem('compass')">购买</button>
+                </div>
+            </div>
+            <div class="shop-item" id="shopIT_whistle">
+                <div class="shop-item-icon">🕊️</div>
+                <div class="shop-item-info">
+                    <div class="shop-item-name">糖果鸟哨 <span class="shop-tag-adv">冒险</span></div>
+                    <div class="shop-item-desc">吹响哨子，立刻召来巨型糖果鸟</div>
+                    <div class="shop-item-count"><span id="is_whistle">x0</span> · 90💰</div>
+                </div>
+                <div class="shop-item-actions">
+                    <button class="shop-btn shop-btn-use" id="isUse_whistle" onclick="useItem('whistle')">使用</button>
+                    <button class="shop-btn shop-btn-buy" onclick="buyItem('whistle')">购买</button>
+                </div>
+            </div>
+            <div class="shop-item" id="shopIT_frogdrink">
+                <div class="shop-item-icon">🥤</div>
+                <div class="shop-item-info">
+                    <div class="shop-item-name">蛙力饮料</div>
+                    <div class="shop-item-desc">接下来3竿青蛙绝不失误（大鱼不再跑）</div>
+                    <div class="shop-item-count"><span id="is_frogdrink">x1</span> · 100💰</div>
+                </div>
+                <div class="shop-item-actions">
+                    <button class="shop-btn shop-btn-use" id="isUse_frogdrink" onclick="useItem('frogdrink')">使用</button>
+                    <button class="shop-btn shop-btn-buy" onclick="buyItem('frogdrink')">购买</button>
                 </div>
             </div>
             <div style="text-align:center;margin-top:16px">
@@ -1592,20 +1794,38 @@ body{
             <div class="ending-result-title" id="endingResultTitle"></div>
             <div class="ending-result-detail" id="endingResultDetail"></div>
             <div class="ending-result-btns">
+                <button class="gacha-btn btn-ten" id="endingResultRetryBtn" onclick="battleRetryFromLose()" style="display:none">😤 不服！再来一次！</button>
                 <button class="gacha-btn btn-single" id="endingResultMainBtn" onclick="endingResultContinue()">继续</button>
             </div>
         </div>
     </div>
 
-    <!-- DEV 开发者模式 -->
+    <!-- 开场剧情（序章） -->
+    <div class="intro-overlay" id="introOverlay">
+        <div class="intro-scene">
+            <div class="intro-avatar" id="introAvatar">🌊</div>
+            <div class="intro-speaker" id="introSpeaker">旁白</div>
+            <div class="intro-text" id="introText"></div>
+            <div class="intro-dots" id="introDots"></div>
+            <div class="intro-btns">
+                <button class="gacha-btn btn-sell" onclick="skipIntroStory()">⏭️ 跳过</button>
+                <button class="gacha-btn btn-single" id="introNextBtn" onclick="introNext()">继续 ➡️</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 开发者作弊模式 -->
     <div class="dev-overlay" id="devOverlay">
         <div class="dev-panel">
-            <div class="dev-title">🔧 DEV 开发者模式</div>
-            <div class="dev-desc">测试专用 · 不影响正式流程</div>
+            <div class="dev-title">🔧 开发者作弊模式</div>
+            <div class="dev-desc">作弊专用 · 仅供测试</div>
             <button class="dev-btn dev-btn-main" onclick="devStartBoss()">⚔️ 直接开始 BOSS 战</button>
+            <button class="dev-btn" onclick="devUnlockAllLevels()">🔓 一键解锁全部关卡</button>
             <button class="dev-btn" onclick="devStartEnding()">🎬 测试最终剧情</button>
             <button class="dev-btn" onclick="devAddCoins()">💰 立刻获得100万</button>
             <button class="dev-btn" onclick="devReplayTutorial()">📖 新手教程回顾</button>
+            <button class="dev-btn" onclick="devReplayIntro()">🌅 重看开场剧情</button>
+            <button class="dev-btn dev-btn-danger" onclick="devResetProgress()">🗑️ 重置所有进度</button>
             <div class="dev-desc" style="margin-top:4px">🐸 青蛙等级：<span id="devFrogLvTxt">Lv.1</span></div>
             <div class="dev-lv-row">
                 <button class="dev-btn dev-lv" onclick="devSetFrogLv(1)">Lv.1</button>
@@ -1620,6 +1840,19 @@ body{
     </div>
 </div>
 
+<!-- 全局目标结算弹窗 -->
+<div id="goalOverlay">
+    <div class="goal-card">
+        <div class="goal-emoji" id="goalEmoji">🌈</div>
+        <div class="goal-title" id="goalTitle">100 万达成！</div>
+        <div class="goal-sub" id="goalSub"></div>
+        <div class="goal-stats">本次旅程共赚到 <span id="goalEarned2">0</span> 💰 · 用时 <span id="goalDays2">0</span> 天</div>
+        <div class="goal-btns">
+            <button class="gacha-btn btn-ten" onclick="resetRun()">🔄 重新开始挑战</button>
+            <button class="gacha-btn btn-album" onclick="resetRun()">🏠 回主菜单</button>
+        </div>
+    </div>
+</div>
 <script src="game.js"></script>
 </body>
 </html>
