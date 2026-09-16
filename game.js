@@ -6,6 +6,44 @@ let spots=[],temptations=[],trashItems=[];
 const SPOT_ZONES=['water','cloud','mountain','sky','tree','sun','rock'];
 const ZONE_COLORS={water:'#4FC3F7',cloud:'#E8EAF6',mountain:'#8D6E63',sky:'#90CAF9',tree:'#66BB6A',sun:'#FFEE58',rock:'#78909C'};
 const ZONE_EMOJI={water:'🌊',cloud:'☁️',mountain:'⛰️',sky:'🌤️',tree:'🌳',sun:'☀️',rock:'🪨'};
+const ZONE_NAME={water:'湖泊水域',cloud:'云端幻境',mountain:'山涧溪流',sky:'天空之海',tree:'巨树树冠',sun:'烈日熔湖',rock:'礁石深渊'};
+// 钓点区域权重：让大部分钓点落在水下（water 占约 62%）
+const SPOT_ZONE_WEIGHTS={water:62,rock:4,cloud:7,mountain:9,sky:8,tree:6,sun:4};
+// 各非水域的基础稀有度加成（天空 / 山 更容易出稀有鱼）
+const ZONE_RARITY_BONUS={cloud:1,mountain:2,sky:2,tree:0,rock:0};
+
+// 按权重随机选择钓点区域
+function pickSpotZone(){
+  let keys=Object.keys(SPOT_ZONE_WEIGHTS),total=0;
+  for(let k of keys)total+=SPOT_ZONE_WEIGHTS[k];
+  let r=Math.random()*total,acc=0;
+  for(let k of keys){acc+=SPOT_ZONE_WEIGHTS[k];if(r<=acc)return k;}
+  return 'water';
+}
+// 水下钓点纵向范围：从水面往下到接近水底
+function waterTopY(){return H*WL+14;}
+function waterBotY(){return H*0.86;}
+// 水下钓点：从水面到水底随机分布（越往下的钓点越深）
+function waterSpotY(){return waterTopY()+Math.random()*(waterBotY()-waterTopY());}
+// 水深比例：0=水面，1=水底
+function waterDepthRatio(y){
+  let top=H*WL,bot=waterBotY();
+  return Math.max(0,Math.min(1,(y-top)/(bot-top||1)));
+}
+// 水深稀有度加成：越深的水加成越高
+function waterDepthBonus(y){
+  let d=waterDepthRatio(y);
+  if(d>0.85)return 3;
+  if(d>0.6)return 2;
+  if(d>0.3)return 1;
+  return 0;
+}
+// 统一计算区域稀有度加成（水用深度，太阳用关卡配置，天空/山固定较高）
+function zoneBonusRarity(zone,y,cfg){
+  if(zone==='water')return waterDepthBonus(y);
+  if(zone==='sun')return cfg?(cfg.srBonus?2:(cfg.ssrBonus?3:1)):2;
+  return ZONE_RARITY_BONUS[zone]||0;
+}
 
 // 关卡配置
 // 50 关闯关主线：奖励总额恰为 800,000（通关 80 万 + 沿途鱼钱 → 冲刺全局 100 万）
@@ -14,20 +52,20 @@ const LEVELS=[
   {id:1,name:'初出茅庐',desc:'热身关！钓到任意 3 条鱼',goal:{type:'fish',count:3},casts:8,fakeRate:0.15,spots:5},
   {id:2,name:'再战江湖',desc:'手感渐热，钓到 4 条鱼',goal:{type:'fish',count:4},casts:9,fakeRate:0.2,spots:6},
   {id:3,name:'水草危机',desc:'水面漂着水草团！避开干扰钓 4 条鱼',goal:{type:'fish',count:4},casts:9,fakeRate:0.25,spots:6},
-  {id:4,name:'雾里看花',desc:'【道具教学·闪光弹】假钓点混入！钓 5 条真鱼',goal:{type:'fish',count:5},casts:11,fakeRate:0.4,spots:8},
-  {id:5,name:'云中漫步',desc:'【区域教学·云】从云朵钓点钓到 2 条云鱼',goal:{type:'zone_cloud',count:2},casts:10,fakeRate:0.3,spots:6,forceCloud:2},
+  {id:4,name:'雾里看花',desc:'【道具教学】先用💣闪光弹照出假点，再钓 5 条真鱼',goal:{type:'fish',count:5},casts:11,fakeRate:0.4,spots:8},
+  {id:5,name:'云中漫步',desc:'【区域教学】对准☁️云朵钓点下竿，钓 2 条云鱼',goal:{type:'zone_cloud',count:2},casts:10,fakeRate:0.3,spots:6,forceCloud:2},
   // ===== 第一章 · 试炼开始（6-10）=====
   {id:6,name:'R 级信号',desc:'钓到 2 条 R 级以上的鱼',goal:{type:'rarity',rarity:'R',count:2},casts:10,fakeRate:0.3,spots:6},
-  {id:7,name:'山岩藏宝',desc:'【区域教学·山】山岩钓点出 R 级珍品，钓 2 条',goal:{type:'zone_rarity',zone:'mountain',rarity:'R',count:2},casts:11,fakeRate:0.3,spots:7,forceMountain:2},
+  {id:7,name:'山岩藏宝',desc:'【区域教学】对准⛰️山岩钓点下竿，钓 2 条 R 级',goal:{type:'zone_rarity',zone:'mountain',rarity:'R',count:2},casts:11,fakeRate:0.3,spots:7,forceMountain:2},
   {id:8,name:'真假难辨',desc:'假钓点暴增！钓 6 条真鱼稳住心态',goal:{type:'fish',count:6},casts:12,fakeRate:0.5,spots:9},
   {id:9,name:'云上人家',desc:'云中渔获 3 条',goal:{type:'zone_cloud',count:3},casts:12,fakeRate:0.3,spots:7,forceCloud:3},
   {id:10,name:'第一道金光',desc:'钓到 1 条 SR 级鱼（首次接触高星鱼）',goal:{type:'rarity',rarity:'SR',count:1},casts:14,fakeRate:0.3,spots:7,srBonus:0.15},
   // ===== 第二章 · 道具讲堂（11-15）=====
-  {id:11,name:'道具课·闪光弹',desc:'假点太多！使用💣闪光弹揭示真伪，钓 5 条真鱼',goal:{type:'fish',count:5},casts:13,fakeRate:0.55,spots:10},
-  {id:12,name:'道具课·精准雷达',desc:'使用🎯精准雷达确保真点，钓 3 条 R 级鱼',goal:{type:'rarity',rarity:'R',count:3},casts:13,fakeRate:0.6,spots:9},
-  {id:13,name:'道具课·强化香饵',desc:'使用🍀香饵提升稀有度，钓 2 条 SR 鱼',goal:{type:'rarity',rarity:'SR',count:2},casts:17,fakeRate:0.4,spots:8,srBonus:0.18},
-  {id:14,name:'道具课·呼唤鱼群',desc:'钓点刷新太慢？用🐟呼唤鱼群，钓 7 条鱼',goal:{type:'fish',count:7},casts:14,fakeRate:0.4,spots:8},
-  {id:15,name:'道具课·延时沙漏',desc:'竿数吃紧？用⏰沙漏加 2 竿，钓 8 条鱼',goal:{type:'fish',count:8},casts:12,fakeRate:0.35,spots:8},
+  {id:11,name:'道具课·闪光弹',desc:'【道具教学】先用💣闪光弹照亮假点，再钓 5 条真鱼',goal:{type:'fish',count:5},casts:13,fakeRate:0.55,spots:10},
+  {id:12,name:'道具课·精准雷达',desc:'【道具教学】先开🎯雷达锁定真点，再钓 3 条 R 级',goal:{type:'rarity',rarity:'R',count:3},casts:13,fakeRate:0.6,spots:9},
+  {id:13,name:'道具课·强化香饵',desc:'【道具教学】先撒🍀香饵提升稀有度，再钓 2 条 SR',goal:{type:'rarity',rarity:'SR',count:2},casts:17,fakeRate:0.4,spots:8,srBonus:0.18},
+  {id:14,name:'道具课·呼唤鱼群',desc:'【道具教学】用🐟呼唤鱼群刷新钓点，再钓 7 条鱼',goal:{type:'fish',count:7},casts:14,fakeRate:0.4,spots:8},
+  {id:15,name:'道具课·延时沙漏',desc:'【道具教学】用⏰沙漏加 2 竿，再钓 8 条鱼',goal:{type:'fish',count:8},casts:12,fakeRate:0.35,spots:8},
   // ===== 第三章 · 山川湖海（16-20）=====
   {id:16,name:'石缝惊魂',desc:'山岩区钓 3 条 R 级',goal:{type:'zone_rarity',zone:'mountain',rarity:'R',count:3},casts:14,fakeRate:0.35,spots:8,forceMountain:2},
   {id:17,name:'云席酒宴',desc:'云鱼 3 条 + R 级 1 条',goal:{type:'combo',sub:[{type:'zone_cloud',count:3},{type:'rarity',rarity:'R',count:1}]},casts:14,fakeRate:0.35,spots:8,forceCloud:3},
@@ -146,10 +184,176 @@ const FISH_POOL=[
   {id:'clouddragon',n:'云中龙',e:'🐉',r:'UR', w:[8,25],v:4800, c:'#E8E8FF',zone:'cloud'},
   {id:'rockcrab', n:'岩壳蟹',e:'🦀',r:'R',  w:[0.5,3],v:200, c:'#8B7355',zone:'mountain'},
   {id:'sunkoi',   n:'日轮锦鲤',e:'☀️',r:'UR', w:[3,10],v:5000, c:'#FFA500',zone:'sun'},
+  // 彩蛋鱼（仅通过 maybeEasterFish 0.3% 概率触发，不参与普通池抽选）
+  {id:'milky',    n:'奶鱼',   e:'🍼',r:'UR', w:[3,10], v:6666, c:'#FFE8C8', easter:true},
 ];
+
+// ============ 鱼类艺术系统：每条鱼用 canvas 独立绘制，绝不重样 ============
+// s:身形  b:体色  be:腹部/花纹色  f:鳍尾色  t:尾型  p:花纹  e:眼  m:嘴  w:须  g:发光
+const FISH_ART={
+  crucian:{s:'oval',b:'#8da0b0',be:'#c0d0e0',f:'#6a8090',t:'fork',p:'none',e:'n',m:'s'},
+  bleak:{s:'slender',b:'#d8d8d8',be:'#f0f0f0',f:'#b0b0b0',t:'fork',p:'line',e:'n',m:'s'},
+  chub:{s:'round',b:'#a0b0c0',be:'#d0d8e0',f:'#8090a0',t:'round',p:'none',e:'big',m:'s'},
+  loach:{s:'eel',b:'#8b7355',be:'#a89070',f:'#6a5035',t:'point',p:'none',e:'s',m:'s',w:1},
+  wildcarp:{s:'oval',b:'#9da0b0',be:'#c8c8b8',f:'#7a8090',t:'fork',p:'spots',e:'n',m:'s'},
+  catfish:{s:'catfish',b:'#d4a040',be:'#e8c878',f:'#b88830',t:'round',p:'none',e:'n',m:'wide',w:1},
+  grasscarp:{s:'elongated',b:'#6b8e5a',be:'#a8c890',f:'#506a40',t:'square',p:'scale',e:'n',m:'s'},
+  greencarp:{s:'oval',b:'#5a8a6a',be:'#88b89a',f:'#406a50',t:'fork',p:'scale',e:'n',m:'s'},
+  bream:{s:'flat',b:'#88a0b0',be:'#c0d0e0',f:'#6a8090',t:'fork',p:'none',e:'n',m:'s'},
+  bighead:{s:'bighead',b:'#7a8aaa',be:'#b0c0d8',f:'#5a6a8a',t:'round',p:'none',e:'big',m:'wide'},
+  culter:{s:'sleek',b:'#b0c0d0',be:'#e0e8f0',f:'#8090a0',t:'fork',p:'none',e:'n',m:'up'},
+  bass:{s:'oval',b:'#4a7a4a',be:'#a8c898',f:'#2a5a2a',t:'round',p:'stripes',e:'n',m:'wide'},
+  mandarin:{s:'oval',b:'#d4b050',be:'#f0d890',f:'#a88830',t:'round',p:'spots',e:'n',m:'s'},
+  snakehead:{s:'eel',b:'#2a3a2a',be:'#5a6a5a',f:'#1a2a1a',t:'round',p:'spots',e:'angry',m:'wide'},
+  'catfish-big':{s:'catfish',b:'#5a6a5a',be:'#889a88',f:'#3a4a3a',t:'round',p:'none',e:'n',m:'wide',w:1},
+  siniperca:{s:'oval',b:'#c09060',be:'#e8c098',f:'#a07040',t:'round',p:'spots',e:'n',m:'wide'},
+  goldcarp:{s:'koi',b:'#FFD700',be:'#FFF0A0',f:'#E0B800',t:'flowing',p:'scales',e:'n',m:'s',g:1},
+  arowana:{s:'dragon',b:'#E8E8E8',be:'#FFFFFF',f:'#B0B0B0',t:'flowing',p:'scales',e:'n',m:'s'},
+  arapaima:{s:'armored',b:'#8B4513',be:'#C89060',f:'#6a3010',t:'round',p:'armor',e:'s',m:'wide'},
+  eel:{s:'eel',b:'#00CED1',be:'#40E8E8',f:'#009a9a',t:'point',p:'glow',e:'n',m:'s',g:1},
+  sturgeon:{s:'armored',b:'#FF6347',be:'#FFa090',f:'#c04030',t:'point',p:'armor',e:'n',m:'pointed'},
+  dragon:{s:'dragon',b:'#9400D3',be:'#c060ff',f:'#7000a0',t:'flowing',p:'scales',e:'angry',m:'wide',g:1},
+  koi:{s:'koi',b:'#FFD700',be:'#FFFFFF',f:'#E0B800',t:'flowing',p:'koi',e:'n',m:'s'},
+  cloudcarp:{s:'koi',b:'#E0E0FF',be:'#FFFFFF',f:'#a0a0d0',t:'flowing',p:'cloud',e:'n',m:'s'},
+  skyray:{s:'ray',b:'#87CEEB',be:'#c0e8f8',f:'#5099b8',t:'whip',p:'none',e:'n',m:'under'},
+  suneel:{s:'eel',b:'#FFD700',be:'#FFF0A0',f:'#E0B800',t:'point',p:'glow',e:'n',m:'s',g:1},
+  clouddragon:{s:'dragon',b:'#E8E8FF',be:'#FFFFFF',f:'#a0a0d8',t:'flowing',p:'scales',e:'n',m:'s',g:1},
+  rockcrab:{s:'crab',b:'#8B7355',be:'#a89070',f:'#6a5035',t:'none',p:'none',e:'n',m:'s'},
+  sunkoi:{s:'koi',b:'#FFA500',be:'#FFD070',f:'#E08000',t:'flowing',p:'sun',e:'n',m:'s',g:1},
+  milky:{s:'image'},
+};
+function _p(c,fn){c.beginPath();fn(c);}
+function drawFishArt(c,fish,x,y,size,dir,alpha){
+  let cfg=FISH_ART[fish.id]||FISH_ART.crucian;
+  c.save();
+  c.globalAlpha=(alpha==null?1:alpha);
+  c.translate(x,y);
+  c.scale(size/40,size/40);
+  if(dir<0)c.scale(-1,1);
+  if(cfg.g){c.shadowColor=cfg.b;c.shadowBlur=18;}
+  if(cfg.s==='image'){c.restore();return;}
+  let b=cfg.b,be=cfg.be,f=cfg.f;
+  c.fillStyle=f;
+  if(cfg.t==='fork'){_p(c,()=>{c.moveTo(-30,0);c.lineTo(-58,-24);c.lineTo(-44,0);c.lineTo(-58,24);});c.fill();}
+  else if(cfg.t==='round'){c.beginPath();c.ellipse(-38,0,16,22,0,0,Math.PI*2);c.fill();}
+  else if(cfg.t==='square'){c.fillRect(-58,-20,20,40);}
+  else if(cfg.t==='point'){_p(c,()=>{c.moveTo(-30,0);c.lineTo(-58,-7);c.lineTo(-58,7);});c.fill();}
+  else if(cfg.t==='flowing'){_p(c,()=>{c.moveTo(-28,0);c.bezierCurveTo(-55,-30,-72,-10,-68,0);c.bezierCurveTo(-72,10,-55,30,-28,0);});c.fill();}
+  else if(cfg.t==='whip'){c.lineWidth=5;c.strokeStyle=f;c.beginPath();c.moveTo(-8,4);c.quadraticCurveTo(-60,-2,-88,14);c.stroke();}
+  if(cfg.s!=='ray'&&cfg.s!=='crab'){
+    c.fillStyle=f;c.beginPath();
+    if(cfg.s==='eel'||cfg.s==='dragon'){c.moveTo(-4,-9);c.quadraticCurveTo(6,-26,16,-9);}
+    else{c.moveTo(-6,-13);c.quadraticCurveTo(6,-30,22,-12);}
+    c.closePath();c.fill();
+  }
+  c.fillStyle=b;c.beginPath();
+  switch(cfg.s){
+    case 'oval':c.ellipse(0,0,32,16,0,0,Math.PI*2);break;
+    case 'slender':c.ellipse(0,0,38,8,0,0,Math.PI*2);break;
+    case 'round':c.ellipse(0,0,26,22,0,0,Math.PI*2);break;
+    case 'eel':c.ellipse(0,0,40,9,0,0,Math.PI*2);break;
+    case 'flat':c.ellipse(0,0,20,24,0,0,Math.PI*2);break;
+    case 'sleek':c.ellipse(0,0,36,9,0,0,Math.PI*2);break;
+    case 'bighead':c.ellipse(8,0,28,20,0,0,Math.PI*2);break;
+    case 'catfish':c.ellipse(0,0,30,15,0,0,Math.PI*2);break;
+    case 'koi':c.ellipse(0,0,30,16,0,0,Math.PI*2);break;
+    case 'dragon':c.ellipse(0,0,34,11,0,0,Math.PI*2);break;
+    case 'elongated':c.ellipse(0,0,38,12,0,0,Math.PI*2);break;
+    case 'armored':c.ellipse(0,0,36,14,0,0,Math.PI*2);break;
+    case 'ray':c.moveTo(0,0);c.quadraticCurveTo(8,-30,12,-14);c.quadraticCurveTo(45,-8,40,0);c.quadraticCurveTo(45,8,12,14);c.quadraticCurveTo(8,30,0,0);break;
+    case 'crab':c.ellipse(0,0,28,18,0,0,Math.PI*2);break;
+  }
+  c.fill();
+  c.fillStyle=be;c.beginPath();c.ellipse(6,7,22,4,0,0,Math.PI*2);c.fill();
+  c.lineWidth=1.4;c.strokeStyle=be;
+  if(cfg.p==='stripes'){for(let i=-2;i<=2;i++){c.beginPath();c.moveTo(i*10,-14);c.lineTo(i*10,14);c.stroke();}}
+  else if(cfg.p==='spots'){c.fillStyle=be;for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++){c.beginPath();c.arc(i*14,j*5,2.8,0,Math.PI*2);c.fill();}}
+  else if(cfg.p==='scale'){for(let x=-22;x<24;x+=8)for(let y=-10;y<10;y+=7){c.beginPath();c.arc(x,y,3.2,0,Math.PI*2);c.stroke();}}
+  else if(cfg.p==='armor'){for(let x=-24;x<28;x+=10){c.beginPath();c.moveTo(x,-13);c.lineTo(x,13);c.stroke();}for(let y=-10;y<10;y+=8){c.beginPath();c.moveTo(-30,y);c.lineTo(30,y);c.stroke();}}
+  else if(cfg.p==='koi'){c.fillStyle='#fff';c.beginPath();c.ellipse(10,4,11,5,0,0,Math.PI*2);c.fill();c.fillStyle=b;c.beginPath();c.ellipse(-10,-2,9,4,0,0,Math.PI*2);c.fill();}
+  else if(cfg.p==='cloud'){c.fillStyle=be;[{x:4,y:-2,r:6},{x:-6,y:3,r:5},{x:14,y:2,r:4}].forEach(p=>{c.beginPath();c.arc(p.x,p.y,p.r,0,Math.PI*2);c.fill();});}
+  else if(cfg.p==='sun'){c.fillStyle='#fff';c.beginPath();c.arc(0,0,6,0,Math.PI*2);c.fill();c.strokeStyle='#fff';c.lineWidth=1.5;for(let i=0;i<8;i++){let a=i*Math.PI/4;c.beginPath();c.moveTo(Math.cos(a)*8,Math.sin(a)*8);c.lineTo(Math.cos(a)*14,Math.sin(a)*14);c.stroke();}}
+  else if(cfg.p==='glow'){c.fillStyle='rgba(255,255,255,0.45)';c.beginPath();c.ellipse(0,0,32,7,0,0,Math.PI*2);c.fill();}
+  else if(cfg.p==='line'){c.beginPath();c.moveTo(-32,-7);c.lineTo(32,-7);c.stroke();}
+  c.fillStyle=f;c.beginPath();c.ellipse(4,13,10,5,0.5,0,Math.PI*2);c.fill();
+  if(cfg.e!=='none'){
+    let r=cfg.e==='big'?7:cfg.e==='s'?3.5:5;
+    c.fillStyle='#fff';c.beginPath();c.arc(22,-4,r,0,Math.PI*2);c.fill();
+    c.fillStyle='#000';c.beginPath();c.arc(23,-4,r*0.5,0,Math.PI*2);c.fill();
+    if(cfg.e==='angry'){c.strokeStyle='#000';c.lineWidth=1.5;c.beginPath();c.moveTo(17,-10);c.lineTo(27,-9);c.stroke();}
+  }
+  c.strokeStyle='#000';c.lineWidth=1.2;c.fillStyle='#000';
+  if(cfg.m==='up'){c.beginPath();c.moveTo(32,-2);c.quadraticCurveTo(30,-8,26,-6);c.stroke();}
+  else if(cfg.m==='wide'){c.beginPath();c.moveTo(28,4);c.quadraticCurveTo(33,9,34,2);c.stroke();}
+  else if(cfg.m==='pointed'){c.beginPath();c.moveTo(32,0);c.lineTo(30,-3);c.lineTo(30,3);c.closePath();c.fill();}
+  else if(cfg.m==='under'){c.beginPath();c.arc(0,4,3,0,Math.PI);c.stroke();}
+  else{c.beginPath();c.moveTo(30,2);c.quadraticCurveTo(33,5,32,7);c.stroke();}
+  if(cfg.w){c.strokeStyle=b;c.lineWidth=1;c.beginPath();c.moveTo(24,2);c.quadraticCurveTo(40,10,50,20);c.stroke();c.beginPath();c.moveTo(24,4);c.quadraticCurveTo(40,14,48,26);c.stroke();}
+  if(cfg.s==='ray'){c.fillStyle='#fff';c.beginPath();c.arc(2,-4,4,0,Math.PI*2);c.fill();c.fillStyle='#000';c.beginPath();c.arc(3,-4,2,0,Math.PI*2);c.fill();}
+  if(cfg.s==='crab'){
+    c.fillStyle=f;
+    _p(c,()=>{c.moveTo(-22,-12);c.lineTo(-40,-22);c.lineTo(-44,-14);c.lineTo(-32,-6);});c.fill();
+    _p(c,()=>{c.moveTo(-22,12);c.lineTo(-40,22);c.lineTo(-44,14);c.lineTo(-32,6);});c.fill();
+    _p(c,()=>{c.moveTo(22,-12);c.lineTo(40,-22);c.lineTo(44,-14);c.lineTo(32,-6);});c.fill();
+    _p(c,()=>{c.moveTo(22,12);c.lineTo(40,22);c.lineTo(44,14);c.lineTo(32,6);});c.fill();
+    c.beginPath();c.arc(-44,-20,7,0,Math.PI*2);c.fill();
+    c.beginPath();c.arc(-44,20,7,0,Math.PI*2);c.fill();
+    c.beginPath();c.arc(44,-20,7,0,Math.PI*2);c.fill();
+    c.beginPath();c.arc(44,20,7,0,Math.PI*2);c.fill();
+    c.lineWidth=3;c.strokeStyle=f;
+    [[-14,22,32],[-6,24,36],[6,24,36],[14,22,32],[-14,-22,-32],[-6,-24,-36],[6,-24,-36],[14,-22,-32]].forEach(([x1,y1,y2])=>{c.beginPath();c.moveTo(x1,y1);c.lineTo(x1+8,y2);c.stroke();});
+    c.fillStyle='#fff';c.beginPath();c.arc(2,-10,4,0,Math.PI*2);c.fill();c.beginPath();c.arc(2,10,4,0,Math.PI*2);c.fill();
+    c.fillStyle='#000';c.beginPath();c.arc(3,-10,2,0,Math.PI*2);c.fill();c.beginPath();c.arc(3,10,2,0,Math.PI*2);c.fill();
+  }
+  c.restore();
+}
+// 每条鱼渲染一次并缓存为 dataURL（DOM 用）
+const _fishImgCache={};
+function fishImgSrc(fish){
+  if(fish.id==='milky')return _milkyUrl||'';
+  if(_fishImgCache[fish.id])return _fishImgCache[fish.id];
+  let px=180,cv=document.createElement('canvas');cv.width=px;cv.height=px;
+  drawFishArt(cv.getContext('2d'),fish,px/2,px/2,40,1,1);
+  let url=cv.toDataURL('image/png');
+  _fishImgCache[fish.id]=url;
+  return url;
+}
+// 统一的 <img> 生成：奶鱼未就绪时用占位符，加载完自动替换
+function fishImgHtml(fish,cls){
+  if(fish.id==='milky'&&!_milkyUrl){preloadMilky();return '<span data-milky data-milky-class="'+cls+'">🍼</span>';}
+  return '<img class="'+cls+'" src="'+fishImgSrc(fish)+'" alt="">';
+}
+// 奶鱼素材：加载后自动抠掉白底
+let _milkyUrl=null,_milkyLoading=false;
+function preloadMilky(){
+  if(_milkyUrl||_milkyLoading)return;
+  _milkyLoading=true;
+  let img=new Image();
+  img.onload=()=>{
+    let px=200,cv=document.createElement('canvas');cv.width=px;cv.height=px;
+    let c=cv.getContext('2d');
+    let sc=Math.min(px/img.width,px/img.height),w=img.width*sc,h=img.height*sc;
+    c.drawImage(img,(px-w)/2,(px-h)/2,w,h);
+    let id=c.getImageData(0,0,px,px),d=id.data;
+    for(let i=0;i<d.length;i+=4){if(d[i]>235&&d[i+1]>235&&d[i+2]>235)d[i+3]=0;}
+    c.putImageData(id,0,0);
+    _milkyUrl=cv.toDataURL('image/png');
+    document.querySelectorAll('[data-milky]').forEach(el=>{
+      let cls=el.getAttribute('data-milky-class')||'';
+      el.outerHTML='<img class="'+cls+'" src="'+_milkyUrl+'" alt="">';
+    });
+  };
+  img.onerror=()=>{_milkyLoading=false;};
+  img.src='奶鱼素材.jpg';
+}
+preloadMilky();
 
 const RARITY_GLOW={N:'#4488cc',R:'#8a44dd',SR:'#ddaa22',SSR:'#ff8822',UR:'#ff44aa'};
 const RARITY_STARS={N:'★★',R:'★★★',SR:'★★★★',SSR:'★★★★★',UR:'★★★★★★'};
+const RARITY_ORDER=['N','R','SR','SSR','UR'];
+const RARITY_NAME={N:'普通',R:'稀有',SR:'史诗',SSR:'传说',UR:'神话',easter:'彩蛋'};
+// 图鉴首次解锁奖励：越稀有金币越高
+const ALBUM_REWARD={N:200,R:600,SR:2000,SSR:6000,UR:20000,easter:8888};
 const RARITY_WEIGHTS={N:500,R:300,SR:130,SSR:50,UR:20}; // out of 1000
 const COST_SINGLE=100, COST_TEN=900;
 const PITY_SR=10, PITY_SSR=90, SOFT_PITY=75;
@@ -167,12 +371,58 @@ const FROG_XP={N:8,R:16,SR:32,SSR:64,UR:128,FAKE:1};
 const ADV_DAYS=100, ADV_TARGET=1000000;
 // 全局目标：100 天内赚到 100 万（闯关+冒险共同累计）
 const GOAL_DAYS=100, GOAL_TARGET=1000000;
-const ADV_CASTS_PER_DAY=20;
+const ADV_CASTS_PER_DAY=20; // 仅闯关模式沿用：每关 20 竿上限（冒险模式每天捕鱼数量不限制）
 const FROG_UPGRADE_COST=[0,300,800,2000,5000]; // 青蛙付费升级花费（按当前等级）
 const DANGER_SAFE=30, DANGER_WARN=50, DANGER_DANGER=70, DANGER_DOOM=90;
 const DANGER_CAST=3, DANGER_FAKE=8, DANGER_RARE=-5, DANGER_TIME=0.5;
 const DANGER_PREMONITION=80; // 80%+ 开始出现暴风雨预兆
 const DANGER_DISASTER_CHANCE=0.06; // 90%+每秒6%概率触发灾难
+
+// ============ 全局时间系统（参考《星露谷物语》）============
+// 一天从早上 6:00 开始，到次日凌晨 2:00 结束（共 20 游戏小时 = 1200 游戏分钟）
+// 流速：每 7 秒真实时间流逝 10 游戏分钟（星露谷流速），即一整天约 14 分钟真实时间
+const CLOCK_START=360;          // 早上 6:00（游戏内分钟）
+const CLOCK_DAY_LEN=1200;       // 6:00 → 次日 2:00
+const CLOCK_MIN_PER_SEC=10/7;   // 每 1 秒真实时间 = 10/7 游戏分钟
+
+// ============ 时间流速（1x / 2x / 4x）============
+// 只加速"游戏内时间"：全局时钟（天数 / 时段 / 日出日落）、种鱼生长、以及随时间累积的危险值。
+// 钓鱼手感、鱼群游动、粒子、潜水小游戏等实时演出保持原速，不受影响。
+const TIME_SCALES=[1,2,4];
+let timeScale=1;
+// 当前流速下"一整天"约需多少真实分钟（×1 时约 14 分钟）
+function timeScaleDayMinutes(){return Math.round(CLOCK_DAY_LEN/CLOCK_MIN_PER_SEC/timeScale/60*10)/10;}
+function updateTimeScaleUI(){
+  let txt='⏩ ×'+timeScale;
+  let nodes=document.querySelectorAll('.js-time-speed');
+  for(let i=0;i<nodes.length;i++){
+    let b=nodes[i];
+    b.textContent=txt;
+    b.classList.toggle('fast',timeScale===2);
+    b.classList.toggle('turbo',timeScale===4);
+    b.title='时间流速 ×'+timeScale+' · 一天约 '+timeScaleDayMinutes()+' 分钟（点击切换 1/2/4 倍）';
+  }
+}
+function cycleTimeScale(){
+  let i=TIME_SCALES.indexOf(timeScale);
+  timeScale=TIME_SCALES[(i+1)%TIME_SCALES.length];
+  try{localStorage.setItem('nbc_timeScale',String(timeScale));}catch(e){}
+  updateTimeScaleUI();
+  if(timeScale===1)toast('⏩ 时间流速 ×1 · 已恢复正常速度','gray');
+  else toast('⏩ 时间流速 ×'+timeScale+' · 一天约 '+timeScaleDayMinutes()+' 分钟（危险值同步加快）','blue');
+  sfx_reveal_N();
+}
+function loadTimeScale(){
+  let v=1;
+  try{v=parseInt(localStorage.getItem('nbc_timeScale')||'1',10);}catch(e){}
+  if(TIME_SCALES.indexOf(v)<0)v=1;
+  timeScale=v;
+  updateTimeScaleUI();
+}
+
+// ============ 种鱼模式（Fish Farm）============
+const GARDEN_PLOTS=6;           // 鱼塘格子数量
+const GARDEN_UNLOCK_CAUGHT=3;   // 累计成功钓鱼 3 次后解锁种鱼模式
 
 // ============ 灾难类型系统 ============
 const DISASTERS=[
@@ -180,7 +430,7 @@ const DISASTERS=[
   {id:'tsunami',name:'巨浪海啸',icon:'🌊',desc:'巨浪吞噬了甲板！',effect:'loss_35',msg:'{amt}💰 被巨浪冲走了！',visual:'tsunami'},
   {id:'tornado',name:'龙卷水柱',icon:'🌪️',desc:'海上龙卷风袭来！',effect:'loss_25_end',msg:'{amt}💰 损失+强制收竿！',visual:'tornado'},
   {id:'kraken',name:'深海巨怪',icon:'🐙',desc:'巨大触手从海底伸出！',effect:'lose_day',msg:'今天的鱼获全没了！',visual:'kraken'},
-  {id:'darkfog',name:'诡异黑雾',icon:'🌫️',desc:'黑雾突然笼罩海面...',effect:'casts_5',msg:'只剩5竿可用！',visual:'fog'},
+  {id:'darkfog',name:'诡异黑雾',icon:'🌫️',desc:'黑雾突然笼罩海面，鱼获被卷走...',effect:'loss_10',msg:'{amt}💰 在迷雾中丢了！',visual:'fog'},
   {id:'hail',name:'冰雹袭击',icon:'🧊',desc:'拳头大的冰雹砸下来！',effect:'loss_15_stun',msg:'{amt}💰 损失+冻结3秒！',visual:'hail'},
 ];
 let disasterFX={active:false,type:null,timer:0,intensity:0,paused:false};
@@ -199,7 +449,7 @@ const GOOD_EVENTS=[
 ];
 let goodEventFX={active:false,type:null,timer:0,intensity:0};
 let goodCheckTimer=0;
-let candyBird={active:false,timer:0,x:0,y:0,clicks:0,maxClicks:3,phase:'idle',size:1,shakeTimer:0};
+let candyBird={active:false,timer:0,x:0,y:0,clicks:0,maxClicks:3,phase:'idle',size:1,shakeTimer:0,popTimer:0};
 let tongueState={active:false,phase:'idle',startX:0,startY:0,targetX:0,targetY:0,progress:0,hitTreasure:null};
 let hiddenTreasures=[];
 let treasureSpawnTimer=0;
@@ -613,6 +863,15 @@ let G={
   pitySR:0, pitySSR:0,
   totalPulls:0,
   album:{}, // {fishId: count}
+  albumNew:{}, // {fishId:true} 新解锁但还没在图鉴里看过的鱼（用于 NEW 角标 + 红点）
+  albumPending:{}, // {fishId:reward} 新收录奖励待领取（红点提示，需手动领取）
+  albumFilter:'all', // 图鉴当前筛选
+  redDots:{}, // 通用红点状态 {key:true}
+  // ===== 每日任务 / 签到（捕鱼大作战风格）=====
+  dailyDate:'',   // 每日任务所属日期
+  dailyTasks:{},  // {taskId:{prog,claimed}}
+  signInDate:'',  // 最后签到日期
+  signInDay:0,    // 已连续签到天数
   catches:[], // [{fish,weight,value}]
   pendingPulls:[], // 待揭示的抽卡结果队列
   currentReveal:null, // 当前正在揭示
@@ -628,6 +887,19 @@ let G={
   gameDay:0,       // 全局已结算天数（闯关每通一关 +1，冒险每天结束 +1）
   gameEnded:false, // 本次挑战是否已结束（赢或输）
   levelCleared:0,  // 闯关已通过关数（= 下一关索引），两模式切换不丢失
+  // ===== 全局时间（参考星露谷）=====
+  clockMin:0,      // 当前游戏内分钟（0=6:00，CLOCK_DAY_LEN=次日2:00），每次换天重置
+  worldTime:0,     // 全局累计游戏内分钟（单调递增，用于种鱼生长计时）
+  // ===== 种鱼模式 =====
+  totalCaught:0,   // 冒险+闯关累计成功钓鱼次数（种鱼模式解锁条件）
+  seedlings:{},    // 鱼苗背包 {fishId: 数量}
+  gardenPlots:[],  // 鱼塘 [{fishId,plantTime,growMin}]
+  gardenUnlocked:false, // 种鱼模式是否已解锁
+  gardenMode:false,     // 是否处于种鱼模式
+  gardenTutSeen:false,  // 是否看过种鱼模式教学
+  gardenTutPending:false, // 需要弹出种鱼教学（刚解锁）
+  gardenTutStep:0,      // 教学当前步骤
+  levelTut:{},          // 已完成的关卡教学 {levelId:true}
 };
 
 // 关卡进度追踪
@@ -670,13 +942,73 @@ function rollRarity(){
 }
 
 function pickFish(rarity,zone){
-  let pool=FISH_POOL.filter(f=>f.r===rarity);
+  let pool=FISH_POOL.filter(f=>f.r===rarity&&!f.easter);
   // 区域专属鱼种优先
   if(zone){
     let zonePool=pool.filter(f=>f.zone===zone);
     if(zonePool.length>0&&Math.random()<0.4)return zonePool[Math.floor(Math.random()*zonePool.length)];
   }
   return pool[Math.floor(Math.random()*pool.length)];
+}
+// 彩蛋鱼：0.3% 概率触发，固定 6666 金币
+function maybeEasterFish(){
+  if(Math.random()<0.003){
+    let m=FISH_POOL.find(f=>f.id==='milky');
+    if(m)return {fish:m,weight:6,value:6666};
+  }
+  return null;
+}
+
+// 记录图鉴捕获：首次解锁生成「待领取」奖励（越稀有越多）+ NEW 标记 + 红点
+function registerAlbum(fish){
+  let isNew=!G.album[fish.id];
+  G.album[fish.id]=(G.album[fish.id]||0)+1;
+  // 每日任务：钓鱼数 / 稀有鱼
+  dailyProgress('catch',1);
+  if(fish.r==='SR'||fish.r==='SSR'||fish.r==='UR')dailyProgress('rare',1);
+  let reward=0;
+  if(isNew){
+    if(!G.albumPending)G.albumPending={};
+    G.albumNew[fish.id]=true;
+    reward=(fish.easter?ALBUM_REWARD.easter:ALBUM_REWARD[fish.r])||0;
+    // 奖励不直接到账：挂起为「待领取」，图鉴按钮亮红点提示玩家去领
+    if(reward>0)G.albumPending[fish.id]=(G.albumPending[fish.id]||0)+reward;
+    dailyProgress('album');
+    setTimeout(()=>{
+      updateRedDots();
+      if(reward>0)toast('📖 图鉴新收录！点「📖 图鉴」领取 +'+reward+'💰','gold');
+    },900);
+  }
+  return {isNew,reward};
+}
+// ===== 图鉴收录奖励：待领取 / 领取 =====
+function albumPendingCount(){return Object.keys(G.albumPending||{}).length;}
+function albumPendingTotal(){let t=0;for(let k in (G.albumPending||{}))t+=G.albumPending[k];return t;}
+function claimAlbumReward(id){
+  if(!G.albumPending)G.albumPending={};
+  let rw=G.albumPending[id];
+  if(!rw)return;
+  delete G.albumPending[id];
+  G.coins+=rw;G.totalEarned+=rw;
+  tutComplete('collect_album');
+  if(typeof adv!=='undefined'&&adv&&adv.active)adv.dayEarned+=rw;
+  dailyProgress('earn',rw);
+  toast('📖 收录奖励 +'+rw+'💰','gold');
+  updateUI();updateRedDots();renderAlbum();
+  saveGame(true);
+}
+function claimAllAlbumRewards(){
+  if(!G.albumPending)G.albumPending={};
+  let n=albumPendingCount();
+  if(!n){toast('没有待领取的收录奖励','blue');return;}
+  let total=albumPendingTotal();
+  G.albumPending={};
+  G.coins+=total;G.totalEarned+=total;
+  if(typeof adv!=='undefined'&&adv&&adv.active)adv.dayEarned+=total;
+  dailyProgress('earn',total);
+  toast('📖 一键领取 '+n+' 份收录奖励 +'+total+'💰','gold');
+  updateUI();updateRedDots();renderAlbum();
+  saveGame(true);
 }
 
 function getFishWeight(fish){
@@ -693,8 +1025,7 @@ function doSinglePull(){
   let fish=pickFish(rarity);
   let weight=getFishWeight(fish);
   let value=getFishValue(fish,weight);
-  let isNew=!G.album[fish.id];
-
+  let _eg=maybeEasterFish();if(_eg){fish=_eg.fish;weight=_eg.weight;value=_eg.value;rarity=fish.r;}
   // 更新保底
   G.totalPulls++;
   if(rarity==='SR'||rarity==='SSR'||rarity==='UR'){
@@ -705,10 +1036,10 @@ function doSinglePull(){
     G.pitySR++;G.pitySSR++;
   }
 
-  // 更新图鉴
-  G.album[fish.id]=(G.album[fish.id]||0)+1;
+  // 更新图鉴（首次解锁：发奖励 + NEW 标记 + 红点）
+  let _ar=registerAlbum(fish);
 
-  return {fish,weight,value,isNew,rarity};
+  return {fish,weight,value,isNew:_ar.isNew,albumReward:_ar.reward,rarity};
 }
 
 // ============ 抽卡仪式动画 ============
@@ -718,8 +1049,8 @@ function castAtSpot(spot){
   let cost=adv.active?50:100;
   if(G.coins<cost){toast('💰 金币不足！钓到的鱼会自动换成金币','gold');return;}
   if(adv.active){
-    if(adv.dayEnded){toast('🌅 今天已经结束了，结算吧','orange');return;}
-    if(adv.dayCasts>=ADV_CASTS_PER_DAY){toast('⏰ 今日钓鱼次数已用完！','blue');return;}
+    // 每天捕鱼数量无上限：只有被灾难强制收竿才会暂时封竿，凌晨 2:00 自动进入下一天
+    if(adv.dayEnded){toast('🌅 今天已被灾难收竿，凌晨 2 点自动进入下一天','orange');return;}
   }else{
     if(levelCasts>=levelMaxCasts){levelFailFlow();return;}
   }
@@ -736,10 +1067,14 @@ function castAtSpot(spot){
     return;
   }
 
-  // 设置钓点坐标
-  castX=spot.x; castY=Math.min(spot.y,H*WL+10);
+  // 设置钓点坐标（舌头/鱼钩直接伸到钓点真实位置，可深达水下）
+  castX=spot.x; castY=spot.y;
+  effectInWater=(spot.zone==='water');
+  // 水中鱼：特效锚点在水面（鱼跃出水面）；云/山/太阳鱼：特效直接落在鱼的真实位置
+  castSurfaceY=effectInWater?H*WL:spot.y;
   clickTarget_d=spot;
   spot.clicked=true;
+  tutComplete('cast');
 
   // 精准雷达：强制真货
   if(G.buffs.accuracyNext&&spot.isFake){
@@ -824,8 +1159,9 @@ function castAtSpot(spot){
       let fish=pickFish(rarity,spot.zone);
       let weight=getFishWeight(fish);
       let value=getFishValue(fish,weight);
+      let _eg=maybeEasterFish();if(_eg){fish=_eg.fish;weight=_eg.weight;value=_eg.value;rarity=fish.r;}
       if(adv.active)value=Math.round(value*getAdvMultiplier());
-      let isNew=!G.album[fish.id];
+      let _ar=null;
 
       G.totalPulls++;
       if(!adv.active){
@@ -835,8 +1171,13 @@ function castAtSpot(spot){
           else G.pitySSR++;
         }else{G.pitySR++;G.pitySSR++;}
       }
-      G.album[fish.id]=(G.album[fish.id]||0)+1;
-      result={isFake:false,fish,weight,value,isNew,rarity};
+      // 图鉴：首次解锁发奖励 + NEW 标记 + 红点
+      _ar=registerAlbum(fish);
+      // ===== 种鱼模式：累计钓鱼数 + 掉落对应鱼苗 =====
+      G.totalCaught++;
+      grantSeedling(fish);
+      checkGardenUnlock();
+      result={isFake:false,fish,weight,value,isNew:_ar.isNew,albumReward:_ar.reward,rarity};
       G.catches.push(result);
       // 钓到鱼直接获得金币（无需卖鱼按钮），并计入全局总收入
       recordIncome(value);
@@ -910,14 +1251,19 @@ function updateCeremony(dt){
       if(castTimer_d>=0.9){
         c.phase=1;c.timer=0;castTimer_d=0;
         rodAngle=15;rodBend=8;
-        for(let i=0;i<20;i++)spawnBubble(castX+(Math.random()-0.5)*80,castY+2);
-        spawnSplash(castX,castY);
-        spawnParticles(castX,castY,'#7FEFFF',15,4,0.6);
+        if(effectInWater){
+          for(let i=0;i<20;i++)spawnBubble(castX+(Math.random()-0.5)*80,castSurfaceY+2);
+          spawnSplash(castX,castSurfaceY);
+        }else{
+          // 非水中鱼（云/山/太阳）：在鱼真实位置上炸开彩色闪光，不冒水花
+          spawnParticles(castX,castSurfaceY,RARITY_GLOW[c.bestRarity],16,4,0.6);
+        }
+        spawnParticles(castX,castSurfaceY,'#7FEFFF',15,4,0.6);
         // 稀有度预兆：落水水花颜色 + 扩散波纹（等级越高越明显）
         let preCol=RARITY_GLOW[c.bestRarity];
         let hl=c.hl||1;
-        spawnParticles(castX,castY,preCol,3+hl*3,3+hl*1.2,0.7);
-        spawnRippleRing(castX,castY,preCol,hl>=3?4:2);
+        spawnParticles(castX,castSurfaceY,preCol,3+hl*3,3+hl*1.2,0.7);
+        spawnRippleRing(castX,castSurfaceY,preCol,hl>=3?4:2);
       }
     }
   }else if(c.phase===1){
@@ -929,11 +1275,11 @@ function updateCeremony(dt){
       ceremonyGlow_d=Math.min(0.5+hl*0.12,(c.timer-0.4)/0.6);
       // 稀有度水花粒子（颜色=鱼稀有度）
       if(Math.random()<0.22+0.1*hl*ceremonyGlow_d){
-        spawnParticles(castX+(Math.random()-0.5)*70,castY-6,col1,1+Math.floor(hl/2),2+hl*0.8,0.5);
+        spawnParticles(castX+(Math.random()-0.5)*70,castSurfaceY-6,col1,1+Math.floor(hl/2),2+hl*0.8,0.5);
       }
       // 稀有度扩散波纹
       if(Math.random()<0.3*ceremonyGlow_d*(hl>2?1:0.5)){
-        spawnRippleRing(castX,castY,col1,1);
+        spawnRippleRing(castX,castSurfaceY,col1,1);
       }
       // 青蛙提前感知等级
       if(!c._reactSet&&c.timer>0.6){
@@ -972,16 +1318,17 @@ function revealResult(c){
   let best=c.bestRarity;
   let isFake=c.results[0]&&c.results[0].isFake;
   let frogFail=c.frogFailed||false;
+  if(!isFake&&!frogFail)tutComplete('catch');
 
   // 音效+粒子按实际稀有度
   let rk=rarityRank(best);
   if(frogFail){
     // 青蛙失败：用略暗的稀有度粒子，表示"差一点"
     let dimColor=RARITY_GLOW[best]||'#888888';
-    spawnParticles(castX,castY-5,dimColor,8+rk*6,2+rk*1.5,0.5);
+    spawnParticles(castX,castSurfaceY-5,dimColor,8+rk*6,2+rk*1.5,0.5);
   }else if(isFake){
     sfx_reveal_N();
-    spawnParticles(castX,castY-5,'#888888',10,3,0.6);
+    spawnParticles(castX,castSurfaceY-5,'#888888',10,3,0.6);
   }else{
     switch(best){
       case 'N':sfx_reveal_N();break;
@@ -991,17 +1338,17 @@ function revealResult(c){
       case 'UR':sfx_reveal_UR();break;
     }
     let count=20+rk*20;
-    spawnParticles(castX,castY-5,RARITY_GLOW[best],count,4+rk*2,0.9);
+    spawnParticles(castX,castSurfaceY-5,RARITY_GLOW[best],count,4+rk*2,0.9);
   }
-  spawnSplash(castX,castY);
+  if(effectInWater)spawnSplash(castX,castSurfaceY);
   // 高阶稀有度：震屏 + 连续水花冲击 + 扩散波纹
   if(rk>=3){
     shakeScreen(4+rk*2);
     for(let i=1;i<=rk-1;i++){
-      setTimeout(()=>{spawnSplash(castX,castY);spawnRippleRing(castX,castY,RARITY_GLOW[best],2);},i*90);
+      if(effectInWater)setTimeout(()=>{spawnSplash(castX,castSurfaceY);spawnRippleRing(castX,castSurfaceY,RARITY_GLOW[best],2);},i*90);
     }
   }
-  spawnRippleRing(castX,castY,RARITY_GLOW[best]||'#888888',rk>=3?3:1);
+  spawnRippleRing(castX,castSurfaceY,RARITY_GLOW[best]||'#888888',rk>=3?3:1);
 
   // 更新关卡进度
   if(!adv.active)updateLevelProgress(c.results[0],c.spot);
@@ -1026,12 +1373,20 @@ function showFishCardUI(r){
   let fish=r.fish;
   let card=document.getElementById('revealCard');
   card.className='reveal-card '+fish.r;
-  document.getElementById('rvEmoji').textContent=fish.e;
+  document.getElementById('rvEmoji').innerHTML=fishImgHtml(fish,'rv-fish-img');
   document.getElementById('rvName').textContent=fish.n;
   document.getElementById('rvStars').textContent=RARITY_STARS[fish.r];
   document.getElementById('rvWeight').textContent=r.weight.toFixed(1)+'kg';
   document.getElementById('rvValue').textContent='+'+r.value+' 💰';
   document.getElementById('rvNew').style.display=r.isNew?'inline-block':'none';
+  // 图鉴首次解锁奖励提示
+  let rwEl=document.getElementById('rvAlbumReward');
+  if(rwEl){
+    let rw=r.albumReward||0;
+    if(r.isNew&&rw>0){rwEl.style.display='block';rwEl.textContent='📖 新收录！点「图鉴」领 +'+rw+'💰';}
+    else if(r.isNew){rwEl.style.display='block';rwEl.textContent='📖 新鱼入册！';}
+    else rwEl.style.display='none';
+  }
   // 区域标记
   let zoneTag=document.getElementById('rvZone');
   if(zoneTag&&clickTarget_d)zoneTag.textContent=ZONE_EMOJI[clickTarget_d.zone]||'';
@@ -1046,6 +1401,8 @@ function showDecoyCard(d,rarity,frogFail){
   document.getElementById('rvWeight').textContent=d.msg;
   document.getElementById('rvValue').textContent='+'+d.v+' 💰';
   document.getElementById('rvNew').style.display='none';
+  let rwEl=document.getElementById('rvAlbumReward');
+  if(rwEl)rwEl.style.display='none';
   if(d.v>0){
     recordIncome(d.v);
     if(adv.active)adv.fishBag.push({name:d.n,r:'N',value:d.v,icon:d.e,fishId:''});
@@ -1068,6 +1425,7 @@ function updateLevelProgress(result,spot){
   if(spot.zone==='mountain')levelProgress.zone_mountain++;
   if(spot.zone==='sky')levelProgress.zone_sky++;
   if(spot.zone==='sun')levelProgress.zone_sun++;
+  if(gameMode==='level')levelTutComplete('catch_'+(spot.zone||'water')); // 区域教学：钓到对应区域的鱼
 
   // 稀有度计数
   let rr=rarityRank(result.rarity||'N');
@@ -1133,7 +1491,7 @@ function nextLevel(){
   let reward=lvReward(levelIdx+1);
   recordIncome(reward);
   toast('🗺️ 第'+(levelIdx+1)+'关通关奖励 +'+reward.toLocaleString()+'💰','gold');
-  levelIdx++;G.levelCleared=Math.max(G.levelCleared,levelIdx);G.gameDay++;
+  levelIdx++;G.levelCleared=Math.max(G.levelCleared,levelIdx);G.gameDay++;resetClockToMorning();
   updateGoalHUD();updateUI();
   if(G.levelCleared>=LEVELS.length){
     // 50 关全部通关：认证保险丝，补足差额到 100 万
@@ -1158,6 +1516,7 @@ function startLevel(idx){
   diveState.sessionsLeft=3; // 每关重置潜水次数
   levelGoal=cfg.desc;
   levelComplete_d=false;
+  resetClockToMorning(); // 每关从早上 6:00 开始（全局时钟）
   levelProgress={fish:0,zone_cloud:0,zone_mountain:0,zone_sky:0,zone_sun:0,R:0,SR:0,SSR:0,UR:0,mtn_R:0};
   spots=[];
   levelSpotTimer=0;
@@ -1167,7 +1526,7 @@ function startLevel(idx){
   G.phase='idle';G.ceremony=null;ceremonyAnim_d=null;
   rodAngle=IDLE_ANGLE;rodBend=0;ceremonyGlow_d=0;
   mouseClicked_d=false;
-  castX=stick.x+120;castY=H*WL;
+  castX=stick.x+120;castY=H*WL;castSurfaceY=H*WL;
   updateUI();updateButtons();
   updateLevelHUD();
   spawnSpots(); // 立即生成初始钓点
@@ -1176,6 +1535,7 @@ function startLevel(idx){
   document.getElementById('liName').textContent=cfg.name;
   document.getElementById('liDesc').textContent=cfg.desc;
   toast('🎯 '+cfg.name+' — '+cfg.desc,'blue');
+  maybeLevelTut(idx); // 道具课 / 区域课：进关弹出操作引导教学
 }
 
 function showTenResults(results){
@@ -1185,7 +1545,7 @@ function showTenResults(results){
   grid.innerHTML=sorted.map((r,i)=>{
     let fish=r.fish;
     return `<div class="result-card ${fish.r}" style="animation-delay:${i*0.06}s">
-      <span class="card-emoji">${fish.e}</span>
+      <span class="card-emoji">${fishImgHtml(fish,'card-fish-img')}</span>
       <div class="card-name">${fish.n}</div>
       <div class="card-stars">${RARITY_STARS[fish.r]}</div>
       <div style="font-size:0.7em;color:#aaa">${r.weight.toFixed(1)}kg</div>
@@ -1202,29 +1562,245 @@ function sellAll(){
 }
 
 // ============ 图鉴 ============
+function albumRewardOf(f){return (f.easter?ALBUM_REWARD.easter:ALBUM_REWARD[f.r])||0;}
 function toggleAlbum(){
   let ov=document.getElementById('albumOverlay');
+  tutComplete('open_album');
   if(ov.classList.contains('active')){
     ov.classList.remove('active');
+    let d=document.getElementById('albumDetail');if(d)d.classList.remove('active');
+    // 关闭即视为已查看：清掉 NEW 角标与红点
+    G.albumNew={};
+    updateRedDots();
+    saveGame(true);
     return;
   }
-  // 构建图鉴
+  renderAlbum();
+  ov.classList.add('active');
+}
+function setAlbumFilter(r){G.albumFilter=r;renderAlbum();}
+function renderAlbum(){
   let totalFish=FISH_POOL.length;
-  let owned=Object.keys(G.album).length;
-  document.getElementById('albumProgress').textContent=owned+'/'+totalFish;
-
+  let owned=FISH_POOL.filter(f=>G.album[f.id]).length;
+  let pEl=document.getElementById('albumProgress');
+  if(pEl)pEl.textContent=owned+'/'+totalFish;
+  let bar=document.getElementById('albumBarFill');
+  if(bar)bar.style.width=(totalFish?owned/totalFish*100:0)+'%';
+  // 分稀有度进度
+  let segEl=document.getElementById('albumSegments');
+  if(segEl){
+    let segs=RARITY_ORDER.map(r=>{
+      let all=FISH_POOL.filter(f=>f.r===r);
+      if(!all.length)return '';
+      let own=all.filter(f=>G.album[f.id]).length;
+      return `<span class="album-seg" style="color:${RARITY_GLOW[r]}">${RARITY_NAME[r]} ${own}/${all.length}</span>`;
+    });
+    let eggs=FISH_POOL.filter(f=>f.easter);
+    if(eggs.length){
+      let own=eggs.filter(f=>G.album[f.id]).length;
+      segs.push(`<span class="album-seg" style="color:#FF9CF0">彩蛋 ${own}/${eggs.length}</span>`);
+    }
+    segEl.innerHTML=segs.join('');
+  }
+  // 筛选栏
+  let fEl=document.getElementById('albumFilters');
+  if(fEl){
+    let tabs=[{k:'all',t:'全部'}].concat(RARITY_ORDER.filter(r=>FISH_POOL.some(f=>f.r===r)).map(r=>({k:r,t:RARITY_NAME[r]})));
+    if(FISH_POOL.some(f=>f.easter))tabs.push({k:'easter',t:'彩蛋'});
+    fEl.innerHTML=tabs.map(t=>`<button class="album-tab${G.albumFilter===t.k?' on':''}" onclick="setAlbumFilter('${t.k}')">${t.t}</button>`).join('');
+  }
+  // 待领取奖励横幅
+  let pend=G.albumPending||{};
+  let pc=Object.keys(pend).length,pt=albumPendingTotal();
+  let cbar=document.getElementById('albumClaimBar');
+  if(cbar){
+    if(pc>0){
+      cbar.style.display='flex';
+      cbar.innerHTML=`<span class="acb-txt">🎁 待领取收录奖励 <b>${pc}</b> 份 · 共 <b>+${pt.toLocaleString()}💰</b></span>
+        <button class="acb-btn" onclick="claimAllAlbumRewards()">一键领取</button>`;
+    }else{cbar.style.display='none';cbar.innerHTML='';}
+  }
+  // 格子
   let grid=document.getElementById('albumGrid');
-  grid.innerHTML=FISH_POOL.map(f=>{
+  if(!grid)return;
+  let flt=G.albumFilter||'all';
+  let list=FISH_POOL.filter(f=>flt==='all'||(flt==='easter'?f.easter:f.r===flt));
+  grid.innerHTML=list.map(f=>{
     let count=G.album[f.id]||0;
-    let cls=count>0?'owned':'';
-    return `<div class="album-cell ${cls}">
-      <span class="ae">${count>0?f.e:'❓'}</span>
-      <div>${count>0?f.n:'???'}</div>
-      <div style="font-size:0.7em;color:#888">${RARITY_STARS[f.r]}</div>
-      ${count>0?`<div style="font-size:0.7em;color:#FFD700">x${count}</div>`:''}
+    let isNew=!!G.albumNew[f.id];
+    let rw=albumRewardOf(f);
+    let canClaim=(pend[f.id]||0)>0;
+    let cls=count>0?'owned':'locked';
+    return `<div class="album-cell ${cls}${canClaim?' claimable':''}"${count>0?` onclick="showAlbumDetail('${f.id}')"`:''}>
+      ${isNew?'<span class="album-new">NEW</span>':''}
+      ${canClaim?'<span class="album-gift">🎁</span>':''}
+      <span class="ae">${count>0?fishImgHtml(f,'ae-fish-img'):'❓'}</span>
+      <div class="album-name">${count>0?f.n:'???'}</div>
+      <div class="album-stars" style="color:${RARITY_GLOW[f.r]}">${RARITY_STARS[f.r]}</div>
+      ${canClaim?`<button class="album-claim" onclick="event.stopPropagation();claimAlbumReward('${f.id}')">领取 +${pend[f.id].toLocaleString()}💰</button>`
+        : count>0?`<div class="album-count">已钓 x${count}</div>`
+        :`<div class="album-count" style="color:#7d8a99">首录 +${rw}💰</div>`}
     </div>`;
   }).join('');
-  ov.classList.add('active');
+}
+// 图鉴详情：点击已解锁的鱼查看
+function showAlbumDetail(id){
+  let f=FISH_POOL.find(x=>x.id===id);if(!f)return;
+  let count=G.album[f.id]||0;
+  let rw=albumRewardOf(f);
+  let d=document.getElementById('albumDetail');
+  if(!d)return;
+  d.innerHTML=`<div class="album-detail-card">
+    <div class="adc-img">${fishImgHtml(f,'adc-fish-img')}</div>
+    <div class="adc-name">${f.n}</div>
+    <div class="adc-rar" style="color:${RARITY_GLOW[f.r]}">${RARITY_NAME[f.r]} · ${f.r} ${RARITY_STARS[f.r]}${f.easter?' · 彩蛋鱼':''}</div>
+    <div class="adc-row">参考价值 <b>${f.v}💰</b></div>
+    <div class="adc-row">体重范围 <b>${f.w[0]}~${f.w[1]}kg</b></div>
+    <div class="adc-row">已钓数量 <b>x${count}</b></div>
+    <div class="adc-row">首次收录奖励 <b style="color:#FFD700">+${rw}💰</b></div>
+    ${f.zone?`<div class="adc-row">出没水域 <b>${ZONE_EMOJI[f.zone]||''}${ZONE_NAME[f.zone]||f.zone}</b></div>`:''}
+    ${(G.albumPending&&G.albumPending[f.id])?`<button class="gacha-btn btn-single" onclick="claimAlbumReward('${f.id}');showAlbumDetail('${f.id}')" style="margin-top:12px">🎁 领取 +${G.albumPending[f.id].toLocaleString()}💰</button>`:''}
+    <button class="gacha-btn btn-sell" onclick="document.getElementById('albumDetail').classList.remove('active')" style="margin-top:12px">关闭</button>
+  </div>`;
+  d.classList.add('active');
+  // 看过的鱼去掉 NEW
+  if(G.albumNew[f.id]){delete G.albumNew[f.id];updateRedDots();renderAlbum();}
+}
+
+// ============ 每日任务 & 签到（捕鱼大作战风格）============
+const DAILY_TASKS=[
+  {id:'catch5',   type:'catch', n:'钓到 5 条鱼',        need:5,    rw:500},
+  {id:'catch15',  type:'catch', n:'钓到 15 条鱼',       need:15,   rw:1200},
+  {id:'rare1',    type:'rare',  n:'钓到 1 条 SR 及以上', need:1,    rw:1000},
+  {id:'earn2000', type:'earn',  n:'累计赚取 2000 金币',  need:2000, rw:800},
+  {id:'newfish',  type:'album', n:'图鉴收录 1 条新鱼',    need:1,    rw:600},
+];
+const SIGNIN_REWARDS=[300,500,800,1200,1800,2500,5000];
+function todayStr(){let d=new Date();return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();}
+function ensureDaily(){
+  let t=todayStr();
+  if(G.dailyDate!==t){
+    G.dailyDate=t;G.dailyTasks={};G.dailyClaimed={};
+    DAILY_TASKS.forEach(k=>{G.dailyTasks[k.id]=0;});
+  }
+  if(!G.dailyClaimed)G.dailyClaimed={};
+}
+// 任务进度累计（type: catch / rare / earn / album）
+function dailyProgress(type,amount){
+  if(!type)return;
+  ensureDaily();
+  let changed=false;
+  DAILY_TASKS.forEach(t=>{
+    if(t.type!==type)return;
+    if((G.dailyTasks[t.id]||0)>=t.need)return;
+    G.dailyTasks[t.id]=Math.min(t.need,(G.dailyTasks[t.id]||0)+(amount||1));
+    changed=true;
+  });
+  if(changed){
+    updateRedDots();
+    let ov=document.getElementById('dailyOverlay');
+    if(ov&&ov.classList.contains('active'))renderDailyPanel();
+  }
+}
+function claimDailyTask(id){
+  ensureDaily();
+  let t=DAILY_TASKS.find(x=>x.id===id);if(!t)return;
+  if(G.dailyClaimed[id])return;
+  if((G.dailyTasks[id]||0)<t.need){toast('任务还没完成哦','blue');return;}
+  G.dailyClaimed[id]=true;
+  G.coins+=t.rw;G.totalEarned+=t.rw;
+  toast('✅ 任务完成奖励 +'+t.rw+'💰','gold');
+  updateUI();updateRedDots();renderDailyPanel();saveGame(true);
+}
+function signInAvailable(){return G.signInDate!==todayStr();}
+function doSignIn(){
+  if(!signInAvailable()){toast('今天已经签到过啦','blue');return;}
+  let y=new Date();y.setDate(y.getDate()-1);
+  let yStr=y.getFullYear()+'-'+(y.getMonth()+1)+'-'+y.getDate();
+  if(G.signInDate===yStr)G.signInDay=Math.min(7,(G.signInDay||0)+1);else G.signInDay=1;
+  G.signInDate=todayStr();
+  let rw=SIGNIN_REWARDS[(G.signInDay-1)%7];
+  G.coins+=rw;G.totalEarned+=rw;
+  toast('📅 第'+G.signInDay+'天签到 +'+rw+'💰','gold');
+  updateUI();updateRedDots();renderDailyPanel();saveGame(true);
+}
+function dailyHasReward(){
+  ensureDaily();
+  if(signInAvailable())return true;
+  return DAILY_TASKS.some(t=>!G.dailyClaimed[t.id]&&(G.dailyTasks[t.id]||0)>=t.need);
+}
+function toggleDailyPanel(){
+  let ov=document.getElementById('dailyOverlay');if(!ov)return;
+  if(ov.classList.contains('active')){ov.classList.remove('active');return;}
+  ensureDaily();renderDailyPanel();ov.classList.add('active');
+}
+function renderDailyPanel(){
+  let el=document.getElementById('dailySignin');
+  if(el){
+    let day=G.signInDay||0,avail=signInAvailable(),cells='';
+    for(let i=0;i<7;i++){
+      let done=i<day;
+      cells+=`<div class="si-cell${done?' done':''}${(avail&&i===day)?' today':''}"><div class="si-day">第${i+1}天</div><div class="si-rw">${SIGNIN_REWARDS[i]}</div></div>`;
+    }
+    el.innerHTML=cells+`<button class="si-btn ${avail?'on':''}" ${avail?'':'disabled'} onclick="doSignIn()">${avail?'立即签到':'今日已签'}</button>`;
+  }
+  let list=document.getElementById('dailyList');
+  if(list){
+    list.innerHTML=DAILY_TASKS.map(t=>{
+      let prog=Math.min(t.need,G.dailyTasks[t.id]||0);
+      let done=prog>=t.need,claimed=!!G.dailyClaimed[t.id];
+      let pct=Math.round(prog/t.need*100);
+      return `<div class="daily-task${claimed?' claimed':''}">
+        <div class="dt-info">
+          <div class="dt-name">${t.n}</div>
+          <div class="dt-bar"><div class="dt-bar-fill" style="width:${pct}%"></div></div>
+          <div class="dt-prog">${prog}/${t.need}</div>
+        </div>
+        <button class="dt-btn" ${(!done||claimed)?'disabled':''} onclick="claimDailyTask('${t.id}')">${claimed?'已领取':(done?'领取 +'+t.rw+'💰':'未完成')}</button>
+      </div>`;
+    }).join('');
+  }
+}
+// ============ 红点系统 ============
+function setRedDot(el,on,count){
+  if(!el)return;
+  if(on){
+    let d=el.querySelector('.red-dot');
+    if(!d){d=document.createElement('span');d.className='red-dot';el.appendChild(d);}
+    let n=count||0;
+    d.textContent=n>0?(n>99?'99+':String(n)):'';
+    if(n>0)d.classList.add('with-num');else d.classList.remove('with-num');
+    el.classList.add('has-reddot');
+  }else{
+    let d=el.querySelector('.red-dot');if(d)d.remove();
+    el.classList.remove('has-reddot');
+  }
+}
+function updateRedDots(){
+  try{
+    if(typeof ensureDaily==='function')ensureDaily();
+    // 图鉴：有待领取的收录奖励（优先）或未查看的新鱼
+    let pcnt=albumPendingCount();
+    setRedDot(document.getElementById('btnAlbum'),pcnt>0||Object.keys(G.albumNew||{}).length>0,pcnt);
+    // 道具商店：手里有可用道具
+    setRedDot(document.getElementById('btnShop'),Object.keys(G.items||{}).some(k=>(G.items[k]||0)>0));
+    // 青蛙升级：金币足够
+    let fu=document.getElementById('btnFrogUpgrade');
+    if(fu){
+      let cost=FROG_UPGRADE_COST[frogLv]||0;
+      setRedDot(fu,frogLv<5&&G.coins>=cost);
+    }
+    // 每日任务 / 签到
+    setRedDot(document.getElementById('btnDaily'),dailyHasReward());
+    // 种鱼：有可收获的鱼 / 或还没看过新玩法教学
+    let gc=document.getElementById('mpGardenCard');
+    if(gc){
+      let needTut=isGardenUnlocked()&&!G.gardenTutSeen;
+      setRedDot(gc,(G.gardenPlots||[]).some(p=>gardenReady(p))||needTut);
+    }
+    let gb=document.getElementById('gardenGuideBtn');
+    if(gb)gb.classList.toggle('blink',isGardenUnlocked()&&!G.gardenTutSeen);
+  }catch(e){}
 }
 
 // ============ 道具商店 ============
@@ -1248,6 +1824,74 @@ function updateItemShopUI(){
     }
   }
 }
+// ===== 道具悬停快捷面板：鼠标放到「🎒 道具」上自动展开，一键使用 =====
+const QUICK_ITEM_IDS=['flash','accuracy','lucky','refresh','sandglass','frogdrink','oxygen','cloak','compass','whistle'];
+function buildItemQuickPanel(){
+  let list=document.getElementById('ihpList');
+  if(!list)return;
+  let isAdv=(typeof adv!=='undefined'&&adv&&adv.active);
+  let rows=QUICK_ITEM_IDS.filter(id=>ITEMS[id]&&(!ITEMS[id].advOnly||isAdv));
+  if(!rows.length){list.innerHTML='<div class="ihp-empty">暂无可用的道具</div>';return;}
+  list.innerHTML=rows.map(id=>{
+    let it=ITEMS[id],cnt=G.items[id]||0;
+    let act=cnt>0
+      ? `<button class="ihp-use" onclick="quickUseItem('${id}')">使用</button>`
+      : `<button class="ihp-buy" onclick="quickBuyItem('${id}')">${it.price}💰买</button>`;
+    return `<div class="ihp-row" title="${it.desc}">
+      <span class="ihp-ico">${it.emoji}</span>
+      <span class="ihp-name">${it.name}${it.advOnly?'<i class="ihp-tag">冒险</i>':''}</span>
+      <span class="ihp-cnt">x${cnt}</span>
+      ${act}
+    </div>`;
+  }).join('');
+}
+function quickUseItem(id){
+  if((G.items[id]||0)<=0)return;
+  useItem(id);
+  updateUI();updateItemShopUI();updateRedDots();
+  buildItemQuickPanel();
+  if((G.items[id]||0)<=0)closeItemHover(150);
+  saveGame(true);
+}
+function quickBuyItem(id){
+  buyItem(id);
+  updateRedDots();buildItemQuickPanel();
+}
+function openItemHover(){
+  let btn=document.getElementById('btnShop');
+  let panel=document.getElementById('itemHoverPanel');
+  if(!panel||!btn)return;
+  if(!btn.offsetParent)return; // 按钮不可见时不展开
+  buildItemQuickPanel();
+  let r=btn.getBoundingClientRect();
+  let w=panel.offsetWidth||236;
+  panel.style.left=Math.max(10,Math.min(window.innerWidth-w-10,r.right-w))+'px';
+  panel.style.bottom=(window.innerHeight-r.top+12)+'px';
+  panel.style.top='auto';
+  panel.classList.add('active');
+}
+function closeItemHover(delay){
+  let panel=document.getElementById('itemHoverPanel');
+  if(!panel)return;
+  clearTimeout(closeItemHover._t);
+  closeItemHover._t=setTimeout(()=>panel.classList.remove('active'),delay||200);
+}
+function setupItemHover(){
+  let btn=document.getElementById('btnShop');
+  let panel=document.getElementById('itemHoverPanel');
+  if(!btn||!panel||setupItemHover._done)return;
+  setupItemHover._done=true;
+  btn.addEventListener('mouseenter',()=>{clearTimeout(closeItemHover._t);openItemHover();tutComplete('hover_item');});
+  btn.addEventListener('mouseleave',()=>closeItemHover(300));
+  panel.addEventListener('mouseenter',()=>{clearTimeout(closeItemHover._t);});
+  panel.addEventListener('mouseleave',()=>closeItemHover(180));
+  window.addEventListener('resize',()=>{if(panel.classList.contains('active'))openItemHover();});
+  window.addEventListener('scroll',()=>{if(panel.classList.contains('active'))openItemHover();},true);
+  // 打开商店/图鉴等弹窗时收起
+  document.addEventListener('click',(e)=>{
+    if(panel.classList.contains('active')&&!panel.contains(e.target)&&e.target!==btn&&!btn.contains(e.target))closeItemHover(0);
+  });
+}
 function buyItem(id){
   initAudio();
   let it=ITEMS[id];
@@ -1261,6 +1905,7 @@ function buyItem(id){
 function useItem(id){
   let cnt=G.items[id]||0;
   if(cnt<=0)return;
+  levelTutComplete('use:'+id); // 关卡教学：真的用了对应道具即算学会
   switch(id){
     case 'flash': useFlashBomb();break;
     case 'accuracy': G.buffs.accuracyNext=true;G.items.accuracy--;toast('🎯 精准雷达已激活！下个钓点必为真货','purple');break;
@@ -1302,7 +1947,7 @@ function useItem(id){
       candyBird.active=true;candyBird.timer=0;candyBird.clicks=0;
       candyBird.x=W*0.3+Math.random()*W*0.4;
       candyBird.y=H*0.15+Math.random()*H*0.2;
-      candyBird.phase='appearing';candyBird.size=0.01;candyBird.shakeTimer=0;
+      candyBird.phase='appearing';candyBird.size=0.01;candyBird.shakeTimer=0;candyBird.popTimer=0;
       toast('🕊️ 哨声响起——巨型糖果鸟来了！点它3下！','gold');
       break;
     }
@@ -1312,6 +1957,7 @@ function useItem(id){
       break;
   }
   updateUI();updateItemShopUI();
+  tutComplete('use_item');
   sfx_reveal_R();
 }
 function useFishRefresh(){
@@ -1349,10 +1995,53 @@ let frog={bellySize:1,targetBelly:1,eyeDX:0,eyeDY:0,targetEyeDX:0,targetEyeDY:0,
 let gameMode='',frogLv=1,frogXp=0,frogXpNext=FROG_CFG[0].xp,frogRainbow=false; // 达成100万后青蛙彩虹化
 let adv={active:false,day:1,dayCasts:0,dayEarned:0,totalEarned:0,danger:0,dayEnded:false,penaltyToday:0,gameOver:false,gameWin:false,_warnedWarn:false,_warnedDanger:false,_triggeredDoom:false,
   fishBag:[], plantedVeg:[], plantedFish:[], islandTab:'plant', timeOfDay:'morning'};
-// 时间系统：morning/noon/evening/night 循环
-function getTimeOfDay(dayNum){let i=((dayNum-1)%4+4)%4;return i===0?'morning':i===1?'noon':i===2?'evening':'night';}
-function getTimeEmoji(t){return{noon:'☀️',morning:'🌅',evening:'🌆',night:'🌙'}[t]||'☀️';}
-function getTimeName(t){return{noon:'正午',morning:'早晨',evening:'傍晚',night:'夜晚'}[t]||'白天';}
+// ============ 全局时间系统（参考《星露谷物语》）============
+// 旧的"按天数循环时段"改为"全局连续时钟"：所有模式共用同一个时钟，
+// 时钟随时间真实流动，时段（morning/noon/evening/night）由时钟推导。
+function clockTodayMin(){return ((G.clockMin%CLOCK_DAY_LEN)+CLOCK_DAY_LEN)%CLOCK_DAY_LEN;}
+function clockAbsMin(){return CLOCK_START+clockTodayMin();} // 360(6:00) ~ 1560(次日2:00)
+function clockHM(){
+  let m=Math.floor(clockAbsMin());
+  let h=Math.floor(m/60),mm=m%60;
+  let ap=h<12?'AM':'PM';let h12=h%12;if(h12===0)h12=12;
+  return {h:h12,mm,ap,label:h12+':'+String(mm).padStart(2,'0')+' '+ap};
+}
+function clockStr(){return clockHM().label;}
+// 由全局时钟推导时段（保留旧函数名，忽略传入的天数参数）
+// 6:00-11:00 早晨 | 11:00-14:00 中午 | 14:00-17:00 下午 | 17:00-21:00 傍晚 | 21:00-次日2:00 夜晚
+function getTimeOfDay(dayNum){
+  let t=clockAbsMin();
+  if(t<11*60)return 'morning';   // 6:00 - 11:00
+  if(t<14*60)return 'noon';      // 11:00 - 14:00
+  if(t<17*60)return 'afternoon'; // 14:00 - 17:00
+  if(t<21*60)return 'evening';   // 17:00 - 21:00
+  return 'night';                // 21:00 - 次日 2:00
+}
+function getTimeEmoji(t){return{noon:'☀️',morning:'🌅',afternoon:'🌤️',evening:'🌆',night:'🌙'}[t]||'☀️';}
+function getTimeName(t){return{noon:'中午',morning:'早晨',afternoon:'下午',evening:'傍晚',night:'夜晚'}[t]||'白天';}
+// 换天时把时钟拨回早上 6:00
+function resetClockToMorning(){G.clockMin=0;if(adv&&adv.active)adv.timeOfDay=getTimeOfDay();updateClockHUD();}
+// 全局时钟推进（每帧调用）。dt 为真实秒数
+function tickGlobalClock(dt){
+  if(G.gameEnded||G.paused)return;
+  let dmin=dt*CLOCK_MIN_PER_SEC*timeScale; // 时间流速倍率（1/2/4）
+  G.clockMin+=dmin;
+  G.worldTime+=dmin;
+  if(G.clockMin>=CLOCK_DAY_LEN){
+    G.clockMin-=CLOCK_DAY_LEN;
+    // 凌晨 2:00：冒险模式一律自动进入下一天
+    // （不再要求手动结算；被灾难强制收竿的日子也照常翻页，不会卡住）
+    if(adv.active&&!adv.gameOver){endDay();}
+    else{toast('🌙 已是凌晨 2 点，新的一天开始了','blue');}
+  }
+  adv.timeOfDay=getTimeOfDay();
+  updateClockHUD();
+}
+// 更新全局时钟 HUD
+function updateClockHUD(){
+  let el=document.getElementById('globalClock');if(!el)return;
+  let hm=clockHM();el.textContent=getTimeEmoji(getTimeOfDay())+' '+hm.label;
+}
 let mouseX=-100,mouseY=-100;
 let islandAnimTime=0; // 岛屿动画时间
 
@@ -1539,7 +2228,9 @@ function diveUpdate(dt){
   }
 }
 // ============ 点击选钓点 ============
-let castX=0, castY=0; // 目标钓点坐标
+let castX=0, castY=0; // 目标钓点坐标（舌头/鱼钩实际到达处，可深达水下）
+let castSurfaceY=0;   // 该钓点对应的特效锚点高度（水中=水面；非水中=鱼真实位置）
+let effectInWater=true; // 当前这一竿的鱼是否在水里（云/山/太阳鱼=false）
 let castRipple=0;     // 点击涟漪动画强度
 
 // ============ 待机 pose 系统 ============
@@ -1613,37 +2304,80 @@ function drawRippleRings(){
 }
 
 // ============ 钓点系统 ============
+// 鱼影尺寸：稀有度只给「倾向」不给答案 —— 影子越大越可能有好鱼，但也可能是假货
+const RARITY_SHADOW={N:0,R:0.22,SR:0.46,SSR:0.7,UR:0.95};
+function spotDimScale(){return Math.max(560,Math.min(W,H))/760;}
+// 生成鱼影外观 + 缓慢游动参数（全部是模糊黑色鱼影，看不出具体是什么鱼）
+function initSpotLook(s){
+  let k=spotDimScale();
+  let rf=Math.min(1,(RARITY_SHADOW[s.fishRarity]||0)+Math.random()*0.08);
+  // 尺寸系数 0.35~1.30：稀有鱼整体偏大，但与普通鱼区间重叠 → 需要赌
+  let g=0.35+rf*0.55+Math.random()*0.45;
+  if(s.isFake)g=0.34+Math.random()*0.6; // 假货尺寸同样随机，不留破绽
+  s.sizeK=Math.max(0.3,g);
+  s.size=(11+s.sizeK*21)*k;               // 鱼影半长
+  s.dir=Math.random()<0.5?-1:1;
+  s.vx=s.dir*(6+Math.random()*10)*k;      // 缓慢横向游动
+  s.swimPhase=Math.random()*Math.PI*2;
+  s.tailPhase=Math.random()*Math.PI*2;
+  s.bobAmp=(2.5+Math.random()*4)*k;
+  s.bobSpeed=0.45+Math.random()*0.5;
+  s.baseY=s.y;
+  s.age=0;
+  s.opacity=(s.zone==='water'?0.46:0.4)+Math.random()*0.18;
+  s.minX=stick.x+30;s.maxX=Math.max(s.minX+60,W-40);
+}
+// 区域内随机取点（带回溯次数上限，避免钓点多时死循环）
+function spotXY(zone){
+  switch(zone){
+    case 'water': return {x:stick.x+40+Math.random()*(W-stick.x-80),y:waterSpotY()};
+    case 'cloud': return {x:W*0.1+Math.random()*W*0.8,y:H*0.05+Math.random()*H*0.2};
+    case 'mountain': return {x:W*0.2+Math.random()*W*0.55,y:H*0.2+Math.random()*H*0.2};
+    case 'sky': return {x:W*0.05+Math.random()*W*0.9,y:H*0.03+Math.random()*H*0.15};
+    case 'tree': return {x:W*0.05+Math.random()*W*0.3,y:H*0.25+Math.random()*H*0.25};
+    case 'sun': return {x:W*0.68+Math.random()*W*0.1,y:H*0.12+Math.random()*H*0.1};
+    case 'rock': return {x:W*0.1+Math.random()*W*0.5,y:H*0.4+Math.random()*H*0.12};
+    default: return {x:stick.x+40+Math.random()*(W-stick.x-80),y:waterSpotY()};
+  }
+}
+function findSpotPos(zone){
+  for(let t=0;t<16;t++){
+    let p=spotXY(zone);
+    if(!spots.some(s=>s.life>0&&Math.hypot(s.x-p.x,s.y-p.y)<42))return p;
+  }
+  return null; // 太挤，本次放弃生成
+}
+function makeSpot(zone,isFake,cfg){
+  let p=findSpotPos(zone);
+  if(!p)return null;
+  let bonusRarity=zoneBonusRarity(zone,p.y,cfg||null);
+  let fishRarity=rollSpotRarity({isFake,bonusRarity});
+  let lifeV=4+Math.random()*3;
+  let sp={x:p.x,y:p.y,zone,isFake,temptation:'',life:lifeV,maxLife:lifeV,
+    pulse:Math.random()*Math.PI*2,scale:1,bonusRarity,fishRarity,
+    textAlpha:1,showText:false,flashRevealed:0,flashColor:''};
+  initSpotLook(sp);
+  return sp;
+}
 function spawnSpots(){
   if(G.phase!=='idle')return;
   // 冒险模式：独立钓点生成，不受关卡配置影响
   if(adv.active){
-    let targetCount=3+adv.day*0.3; // 随天数增加钓点
+    // 水中鱼影大幅增加：至少 10 个，随天数继续增长
+    let targetCount=Math.min(15,10+Math.floor(adv.day*0.5));
     spots=spots.filter(s=>s.life>0);
     if(spots.length>=targetCount)return;
-    let needed=Math.min(3,targetCount-spots.length);
+    let needed=Math.min(5,targetCount-spots.length);
+    // 危险度越高 → 假鱼影越多
+    let fakeRate=adv.danger>DANGER_DOOM?0.55:adv.danger>DANGER_DANGER?0.4:adv.danger>DANGER_WARN?0.25:0.12;
+    let waterCount=spots.filter(s=>s.zone==='water').length;
     for(let i=0;i<needed;i++){
-      let zone=SPOT_ZONES[Math.floor(Math.random()*SPOT_ZONES.length)];
-      let x,y,bonusRarity=0;
-      switch(zone){
-        case 'water': x=stick.x+40+Math.random()*(W-stick.x-80); y=H*WL+15+Math.random()*H*0.08; break;
-        case 'cloud': x=W*0.1+Math.random()*W*0.8; y=H*0.05+Math.random()*H*0.2; break;
-        case 'mountain': x=W*0.2+Math.random()*W*0.55; y=H*0.2+Math.random()*H*0.2; break;
-        case 'sky': x=W*0.05+Math.random()*W*0.9; y=H*0.03+Math.random()*H*0.15; break;
-        case 'tree': x=W*0.05+Math.random()*W*0.3; y=H*0.25+Math.random()*H*0.25; break;
-        case 'sun': x=W*0.68+Math.random()*W*0.1; y=H*0.12+Math.random()*H*0.1; break;
-        case 'rock': x=W*0.1+Math.random()*W*0.5; y=H*0.4+Math.random()*H*0.12; break;
-        default: x=stick.x+40+Math.random()*(W-stick.x-80); y=H*WL+10+Math.random()*H*0.1;
-      }
-      let tooClose=spots.some(s=>Math.hypot(s.x-x,s.y-y)<45);
-      if(tooClose){i--;continue;}
-      // 危险度越高 → 假钓点越多
-      let fakeRate=adv.danger>DANGER_DOOM?0.55:adv.danger>DANGER_DANGER?0.4:adv.danger>DANGER_WARN?0.25:0.12;
-      let isFake=Math.random()<fakeRate;
-      let temptation=isFake?TEMPT_FAKE[Math.floor(Math.random()*TEMPT_FAKE.length)]:(Math.random()<0.6?TEMPT_GOOD[Math.floor(Math.random()*TEMPT_GOOD.length)]:Math.random()<0.5?TEMPT_DECOY[Math.floor(Math.random()*TEMPT_DECOY.length)]:'');
-      if(zone==='sun')bonusRarity=2;else if(zone==='mountain')bonusRarity=1;
-      let fishRarity=rollSpotRarity({isFake,bonusRarity});
-      let lifeV=4+Math.random()*3;
-      spots.push({x,y,zone,isFake,temptation,life:lifeV,maxLife:lifeV,pulse:Math.random()*Math.PI*2,scale:1,bonusRarity,fishRarity,textAlpha:1,showText:true,flashRevealed:0,flashColor:''});
+      // 水面是冒险模式主战场：优先保证水里有足够鱼影
+      let zone=(waterCount<7&&Math.random()<0.75)?'water':pickSpotZone();
+      let sp=makeSpot(zone,Math.random()<fakeRate,null);
+      if(!sp)break;
+      if(zone==='water')waterCount++;
+      spots.push(sp);
     }
     return;
   }
@@ -1660,60 +2394,22 @@ function spawnSpots(){
   let forcedSun=cfg.forceSun||0;
 
   for(let i=0;i<needed;i++){
-    let zone, x, y, bonusRarity=0;
+    let zone;
     // 优先放置强制区域
     if(forcedCloud>0){zone='cloud';forcedCloud--;}
     else if(forcedMtn>0){zone='mountain';forcedMtn--;}
     else if(forcedSun>0){zone='sun';forcedSun--;}
-    else zone=SPOT_ZONES[Math.floor(Math.random()*SPOT_ZONES.length)];
+    else zone=pickSpotZone();
 
-    // 根据区域生成坐标
-    switch(zone){
-      case 'water': x=stick.x+40+Math.random()*(W-stick.x-80); y=H*WL+15+Math.random()*H*0.08; break;
-      case 'cloud': x=W*0.1+Math.random()*W*0.8; y=H*0.05+Math.random()*H*0.2; break;
-      case 'mountain': x=W*0.2+Math.random()*W*0.55; y=H*0.2+Math.random()*H*0.2; break;
-      case 'sky': x=W*0.05+Math.random()*W*0.9; y=H*0.03+Math.random()*H*0.15; break;
-      case 'tree': x=W*0.05+Math.random()*W*0.3; y=H*0.25+Math.random()*H*0.25; break;
-      case 'sun': x=W*0.68+Math.random()*W*0.1; y=H*0.12+Math.random()*H*0.1; break;
-      case 'rock': x=W*0.1+Math.random()*W*0.5; y=H*0.4+Math.random()*H*0.12; break;
-      default: x=stick.x+40+Math.random()*(W-stick.x-80); y=H*WL+10+Math.random()*H*0.1;
-    }
-    // 防止钓点重叠
-    let tooClose=spots.some(s=>Math.hypot(s.x-x,s.y-y)<45);
-    if(tooClose){i--;continue;}
-
-    let isFake=Math.random()<cfg.fakeRate;
-    let temptation;
-    if(isFake){
-      // 假钓点：诱人话术
-      temptation=TEMPT_FAKE[Math.floor(Math.random()*TEMPT_FAKE.length)];
-    }else{
-      // 真钓点：可能诱人话术，也可能低调
-      if(Math.random()<0.6) temptation=TEMPT_GOOD[Math.floor(Math.random()*TEMPT_GOOD.length)];
-      else temptation=Math.random()<0.5?TEMPT_DECOY[Math.floor(Math.random()*TEMPT_DECOY.length)]:'';
-    }
-
-    // 特殊区域稀有度加成
-    if(zone==='sun')bonusRarity=cfg.srBonus?2:(cfg.ssrBonus?3:1);
-    else if(zone==='mountain')bonusRarity=1;
-    let fishRarity=rollSpotRarity({isFake,bonusRarity});
-
-    let lifeV=4+Math.random()*3;
-    spots.push({
-      x,y,zone,isFake,temptation,
-      life:lifeV,maxLife:lifeV, // 存活秒数（约5秒刷新）
-      pulse:Math.random()*Math.PI*2,
-      scale:1,
-      bonusRarity,fishRarity,
-      textAlpha:1,
-      showText:true,
-      flashRevealed:0,
-    });
+    // 特殊区域稀有度加成（水=越深越高；天空/山固定较高；太阳按关卡配置）
+    let sp=makeSpot(zone,Math.random()<cfg.fakeRate,cfg);
+    if(!sp)break;
+    spots.push(sp);
   }
 }
 
 function refreshSpot(s){
-  // 钓点消失后重新生成新钓点（优先保证强制区域）
+  // 鱼影游走后重新生成（优先保证强制区域）
   let cfg=LEVELS[levelIdx];
   // 检查是否需要补充强制区域
   let forceCloud=0,forceMtn=0,forceSun=0;
@@ -1724,49 +2420,49 @@ function refreshSpot(s){
   if(forceCloud>0)zone='cloud';
   else if(forceMtn>0)zone='mountain';
   else if(forceSun>0)zone='sun';
-  else zone=SPOT_ZONES[Math.floor(Math.random()*SPOT_ZONES.length)];
-  let x,y;
-  switch(zone){
-    case 'water': x=stick.x+40+Math.random()*(W-stick.x-80); y=H*WL+15+Math.random()*H*0.08; break;
-    case 'cloud': x=W*0.1+Math.random()*W*0.8; y=H*0.05+Math.random()*H*0.2; break;
-    case 'mountain': x=W*0.2+Math.random()*W*0.55; y=H*0.2+Math.random()*H*0.2; break;
-    case 'sky': x=W*0.05+Math.random()*W*0.9; y=H*0.03+Math.random()*H*0.15; break;
-    case 'tree': x=W*0.05+Math.random()*W*0.3; y=H*0.25+Math.random()*H*0.25; break;
-    case 'sun': x=W*0.68+Math.random()*W*0.1; y=H*0.12+Math.random()*H*0.1; break;
-    case 'rock': x=W*0.1+Math.random()*W*0.5; y=H*0.4+Math.random()*H*0.12; break;
-    default: x=stick.x+40+Math.random()*(W-stick.x-80); y=H*WL+10+Math.random()*H*0.1;
-  }
+  else zone=pickSpotZone();
   let isFake=Math.random()<cfg.fakeRate;
-  let bonusRarity=0;
-  if(zone==='sun')bonusRarity=cfg.srBonus?2:(cfg.ssrBonus?3:1);
-  else if(zone==='mountain')bonusRarity=1;
-  let temptation;
-  if(isFake) temptation=TEMPT_FAKE[Math.floor(Math.random()*TEMPT_FAKE.length)];
-  else temptation=Math.random()<0.6?TEMPT_GOOD[Math.floor(Math.random()*TEMPT_GOOD.length)]:TEMPT_DECOY[Math.floor(Math.random()*TEMPT_DECOY.length)];
-  s.x=x;s.y=y;s.zone=zone;s.isFake=isFake;s.temptation=temptation;
-  s.life=4+Math.random()*3;s.maxLife=s.life;s.pulse=Math.random()*Math.PI*2;s.scale=1;
-  s.bonusRarity=bonusRarity;s.textAlpha=1;s.showText=true;
+  s.life=4+Math.random()*3;s.maxLife=s.life; // 先置存活，避免同一批刷新时互相重叠
+  let p=findSpotPos(zone);
+  if(!p){p=spotXY(zone);}
+  let bonusRarity=zoneBonusRarity(zone,p.y,cfg);
+  s.x=p.x;s.y=p.y;s.zone=zone;s.isFake=isFake;s.temptation='';
+  s.pulse=Math.random()*Math.PI*2;s.scale=1;
+  s.bonusRarity=bonusRarity;s.textAlpha=1;s.showText=false;
+  s.flashRevealed=0;
   s.fishRarity=rollSpotRarity({isFake,bonusRarity});
+  initSpotLook(s);
+  s.age=0;
 }
 
 // ============ 鱼群（装饰） ============
 function maintainFishSchool(){
   fishSpawnTimer+=deltaTime;
-  if(fishSpawnTimer<3.0)return;
+  const SPAWN_INTERVAL=0.55;   // 每条鱼固定的出现间隔（秒）—— 出现时间统一
+  const FISH_MAX=10;           // 鱼群总数上限
+  if(fishSpawnTimer<SPAWN_INTERVAL)return;
   fishSpawnTimer=0;
-  let target=6+Math.floor(Math.random()*4);
-  while(fishes.length<target){
-    let fish=FISH_POOL[Math.floor(Math.random()*FISH_POOL.length)];
-    let dir=Math.random()>0.5?1:-1;
-    let speed=(40+Math.random()*80)*dir;
-    let size=fish.w[0]+Math.random()*(fish.w[1]-fish.w[0])*0.5;
-    fishes.push({
-      fish,dir,speed,size,color:fish.c,emoji:fish.e,
-      y:H*WL+H*0.04+Math.random()*H*0.3,
-      x:dir===1?-60:W+60,alive:true,wobble:Math.random()*Math.PI*2,
-      depth:0.3+Math.random()*0.7,alpha:0.3+Math.random()*0.4,
-    });
+  if(fishes.length>=FISH_MAX)return;
+  let dir=Math.random()>0.5?1:-1;
+  let fish,speed,goldenFish=Math.random()<0.01;   // 1% 概率出现高速高等级黄金鱼
+  if(goldenFish){
+    const PREMIUM=['🐉','🐬','🦈','🐢','🐠'];
+    fish=FISH_POOL.find(f=>PREMIUM.includes(f.e))||FISH_POOL[0];
+    speed=(260+Math.random()*140)*dir;   // 游动速度明显更快
+  }else{
+    fish=FISH_POOL[Math.floor(Math.random()*FISH_POOL.length)];
+    // 每条鱼速度都不同：基础 28~180
+    speed=(28+Math.random()*152)*dir;
   }
+  let size=fish.w[0]+Math.random()*(fish.w[1]-fish.w[0])*0.5;
+  fishes.push({
+    fish,dir,speed,size,color:fish.c,emoji:fish.e,
+    y:H*WL+H*0.04+Math.random()*H*0.3,
+    x:dir===1?-60:W+60,alive:true,wobble:Math.random()*Math.PI*2,
+    depth:goldenFish?0.1:0.3+Math.random()*0.7,
+    alpha:goldenFish?0.95:0.3+Math.random()*0.4,
+    golden:goldenFish,
+  });
   for(let i=fishes.length-1;i>=0;i--){
     let f=fishes[i];
     if((f.dir===1&&f.x>W+120)||(f.dir===-1&&f.x<-120))fishes.splice(i,1);
@@ -1817,6 +2513,8 @@ function render(){
   cx.clearRect(0,0,W,H);
   // 岛屿模式
   if(G.islandMode){renderIsland();return;}
+  // 种鱼模式：渲染海面背景作氛围，池塘界面由 DOM 覆盖层绘制
+  if(G.gardenMode){drawSky();drawSun();drawMountains();drawWater();drawFishSchool();drawBoat();drawStickman();return;}
   // 屏幕震动
   if(screenShake>0){
     cx.save();
@@ -2013,92 +2711,79 @@ function drawSpots(){
   let t=Date.now()*0.001;
   spots.forEach(s=>{
     if(s.life<=0||s.clicked)return;
-    let pulse=1+Math.sin(t*3+s.pulse)*0.12;
-    let alpha=Math.min(1,s.life<1.5?s.life/1.5:1); // 快消失时逐渐淡化
+    let sz=s.size||20;
+    // 淡入 + 快消失时淡出（保持「看不清」的模糊感）
+    let fadeIn=Math.min(1,(s.age||0)/0.4);
+    let fadeOut=s.life<1.6?s.life/1.6:1;
+    let breathe=0.88+0.12*Math.sin(t*1.6+s.pulse);
+    let alpha=(s.opacity!==undefined?s.opacity:0.46)*fadeIn*fadeOut*breathe;
+    let dir=s.dir||1;
+    // 越深水越暗，用一层「水光」光晕保证黑色鱼影在深水里依然看得见
+    let dep=Math.max(0,Math.min(1,(s.y-H*WL)/Math.max(1,H-H*WL)));
+    let glowA=0.18+0.5*dep;
+    cx.save();
+    cx.translate(s.x,s.y);
+    cx.scale(dir,1);
+    cx.globalAlpha=alpha;
+    // 1) 水光光晕（只吃亮度，不暴露鱼种）
+    let halo=cx.createRadialGradient(0,0,sz*0.2,0,0,sz*2.0);
+    halo.addColorStop(0,`rgba(150,212,255,${(0.10+0.20*dep)})`);
+    halo.addColorStop(0.55,`rgba(110,180,255,${(0.05+0.11*dep)})`);
+    halo.addColorStop(1,'rgba(110,180,255,0)');
+    cx.fillStyle=halo;
+    cx.beginPath();cx.arc(0,0,sz*2.0,0,Math.PI*2);cx.fill();
+    // 2) 模糊黑色鱼影本体（外发光勾出轮廓，内部仍是看不清的死黑）
+    cx.globalAlpha=Math.min(1,alpha*2.3); // 本体加深，保证深水里也是「黑影」而不是灰雾
+    cx.shadowColor=`rgba(140,205,255,${glowA})`;
+    cx.shadowBlur=Math.max(9,sz*0.75);
+    cx.fillStyle='rgba(4,9,17,0.98)';
+    let bl=sz*0.62,bh=sz*0.4;
+    let tailW=(0.24+0.06*Math.sin(t*2.6+s.tailPhase))*sz;
+    cx.beginPath();cx.ellipse(0,0,bl,bh,0,0,Math.PI*2);cx.fill();
+    // 尾鳍（左右摆动）
+    cx.beginPath();
+    cx.moveTo(-bl*0.82,0);
+    cx.lineTo(-bl*1.05-tailW,-bh*1.05);
+    cx.lineTo(-bl*1.18-tailW*0.5,0);
+    cx.lineTo(-bl*1.05-tailW,bh*1.05);
+    cx.closePath();cx.fill();
+    // 背鳍
+    cx.beginPath();
+    cx.moveTo(-bl*0.32,-bh*0.8);
+    cx.lineTo(bl*0.02,-bh*1.65);
+    cx.lineTo(bl*0.36,-bh*0.75);
+    cx.closePath();cx.fill();
+    // 胸鳍
+    cx.beginPath();
+    cx.ellipse(bl*0.05,bh*0.5,bl*0.24,bh*0.22,0.5,0,Math.PI*2);cx.fill();
+    cx.shadowBlur=0;
+    // 3) 轮廓细光边
+    cx.strokeStyle=`rgba(175,220,255,${(0.10+0.22*dep)*alpha})`;
+    cx.lineWidth=1.1;
+    cx.beginPath();cx.ellipse(0,0,bl,bh,0,0,Math.PI*2);cx.stroke();
+    cx.globalAlpha=alpha;
+    cx.restore();
 
-    // 发光底座
-    let glowColor=ZONE_COLORS[s.zone]||'#4FC3F7';
-    let g=cx.createRadialGradient(s.x,s.y,4,s.x,s.y,28*pulse);
-    g.addColorStop(0,`rgba(${hexRGB(glowColor)},${0.35*alpha})`);
-    g.addColorStop(0.5,`rgba(${hexRGB(glowColor)},${0.15*alpha})`);
-    g.addColorStop(1,'rgba(0,0,0,0)');
-    cx.fillStyle=g;
-    cx.beginPath();cx.arc(s.x,s.y,28*pulse,0,Math.PI*2);cx.fill();
-
-    // 外圈
-    cx.strokeStyle=`rgba(${hexRGB(glowColor)},${0.5*alpha})`;cx.lineWidth=2.5;
-    cx.beginPath();cx.arc(s.x,s.y,18*pulse,0,Math.PI*2);cx.stroke();
-
-    // 内圈虚线
-    cx.strokeStyle=`rgba(255,255,255,${0.4*alpha})`;cx.lineWidth=1;
-    cx.setLineDash([3,3]);
-    cx.beginPath();cx.arc(s.x,s.y,12*pulse,0,Math.PI*2);cx.stroke();
-    cx.setLineDash([]);
-
-    // 区域图标
-    cx.font='16px "Microsoft YaHei",sans-serif';
-    cx.textAlign='center';cx.textBaseline='middle';
-    cx.fillText(ZONE_EMOJI[s.zone]||'📍',s.x,s.y);
-
-    // 诱惑文字气泡（上浮）
-    if(s.showText&&s.temptation){
-      let textAlpha=s.textAlpha*alpha;
-      let textY=s.y-32-Math.sin(t*2+s.pulse)*5;
-
-      // 气泡背景
-      let tw=cx.measureText(s.temptation).width;
-      let bw=tw+20,bh=20;
-      cx.fillStyle=`rgba(0,0,0,${0.6*textAlpha})`;
-      cx.beginPath();roundRect(s.x-bw/2,textY-bh/2,bw,bh,10);cx.fill();
-      // 气泡尖角
-      cx.beginPath();cx.moveTo(s.x-5,textY+bh/2-1);cx.lineTo(s.x,textY+bh/2+8);cx.lineTo(s.x+5,textY+bh/2-1);cx.fill();
-
-      // 边界
-      cx.strokeStyle=`rgba(${hexRGB(glowColor)},${0.5*textAlpha})`;cx.lineWidth=1;
-      cx.beginPath();roundRect(s.x-bw/2,textY-bh/2,bw,bh,10);cx.stroke();
-
-      // 文字
-      cx.fillStyle=`rgba(255,255,255,${0.95*textAlpha})`;
-      cx.font='bold 11px "Microsoft YaHei",sans-serif';
-      cx.fillText(s.temptation,s.x,textY);
-    }
-
-    // 倒计时指示：环形进度条（绿→黄→红）+ 剩余秒数
-    let ml=s.maxLife||7;
-    let pr=Math.max(0,Math.min(1,s.life/ml));
-    let ringCol=pr>0.5?'120,255,150':pr>0.25?'255,220,80':'255,100,100';
-    cx.strokeStyle=`rgba(${ringCol},${0.75*alpha})`;cx.lineWidth=2;
-    cx.beginPath();cx.arc(s.x,s.y,22*pulse,-Math.PI/2,-Math.PI/2+Math.PI*2*pr);cx.stroke();
-    if(s.life>0&&s.life<=3){
-      let fl=0.7+Math.sin(t*8)*0.3;
-      cx.fillStyle=`rgba(255,90,90,${fl*alpha})`;
-      cx.font='bold 10px "Microsoft YaHei",sans-serif';
-      cx.textAlign='center';cx.textBaseline='middle';
-      cx.fillText(Math.max(0.1,s.life).toFixed(1)+'s',s.x,s.y-50-Math.sin(t*2+s.pulse)*5);
-    }
-
-    // 闪光弹揭示：假钓点红色高亮 + ❌ 标记
+    // 闪光弹揭示：假鱼影红色高亮 + ❌ 标记
     if(s.flashRevealed>0&&s.isFake){
       let fa=Math.min(1,s.flashRevealed/4);
       let flicker=0.7+Math.sin(t*8)*0.3;
-      // 红色光晕
-      let fg=cx.createRadialGradient(s.x,s.y,0,s.x,s.y,32*pulse);
+      let rr=sz*1.15;
+      let fg=cx.createRadialGradient(s.x,s.y,0,s.x,s.y,rr*1.6);
       fg.addColorStop(0,`rgba(255,50,50,${0.6*fa*flicker})`);
       fg.addColorStop(0.5,`rgba(255,30,30,${0.25*fa*flicker})`);
       fg.addColorStop(1,'rgba(0,0,0,0)');
       cx.fillStyle=fg;
-      cx.beginPath();cx.arc(s.x,s.y,32*pulse,0,Math.PI*2);cx.fill();
-      // 红色边框
+      cx.beginPath();cx.arc(s.x,s.y,rr*1.6,0,Math.PI*2);cx.fill();
       cx.strokeStyle=`rgba(255,50,50,${0.85*fa})`;cx.lineWidth=3+flicker;
-      cx.beginPath();cx.arc(s.x,s.y,20*pulse,0,Math.PI*2);cx.stroke();
-      // ❌ 大叉
+      cx.beginPath();cx.arc(s.x,s.y,rr,0,Math.PI*2);cx.stroke();
       cx.strokeStyle=`rgba(255,30,30,${0.95*fa})`;cx.lineWidth=4;
-      cx.beginPath();cx.moveTo(s.x-16,s.y-16);cx.lineTo(s.x+16,s.y+16);cx.stroke();
-      cx.beginPath();cx.moveTo(s.x+16,s.y-16);cx.lineTo(s.x-16,s.y+16);cx.stroke();
-      // 标签
+      cx.beginPath();cx.moveTo(s.x-rr*0.75,s.y-rr*0.75);cx.lineTo(s.x+rr*0.75,s.y+rr*0.75);cx.stroke();
+      cx.beginPath();cx.moveTo(s.x+rr*0.75,s.y-rr*0.75);cx.lineTo(s.x-rr*0.75,s.y+rr*0.75);cx.stroke();
       cx.fillStyle=`rgba(255,255,255,${0.95*fa})`;
       cx.font='bold 12px "Microsoft YaHei"';
-      cx.fillText('❌假货',s.x,s.y+26);
+      cx.textAlign='center';cx.textBaseline='middle';
+      cx.fillText('❌假货',s.x,s.y+rr+12);
     }
   });
 }
@@ -2603,25 +3288,54 @@ function drawHookLine(){
 }
 
 function drawFishSchool(){
+  // 水下永远看不清具体是什么鱼：只留一团团缓慢移动的模糊暗影 + 气泡涟漪
   fishes.forEach(f=>{
     if(!f.alive)return;
     let surfaceY=H*WL;
-    let alpha=f.alpha*(1-f.depth);
-    // 鱼影
-    if(f.depth<0.5){
-      cx.save();cx.globalAlpha=alpha*0.3;
-      cx.fillStyle='#000';cx.shadowColor='#000';cx.shadowBlur=6;
-      let sz=Math.min(f.size/2,40)+6;
-      cx.beginPath();cx.ellipse(f.x,f.y,sz,sz*0.3,0,0,Math.PI*2);cx.fill();
-      cx.shadowBlur=0;cx.restore();
+    // 黄金鱼：底层金色光晕
+    if(f.golden){
+      cx.save();
+      let gr=cx.createRadialGradient(f.x,f.y,0,f.x,f.y,f.size*2.4);
+      gr.addColorStop(0,'rgba(255,216,90,0.55)');
+      gr.addColorStop(0.6,'rgba(255,200,60,0.22)');
+      gr.addColorStop(1,'rgba(255,200,60,0)');
+      cx.fillStyle=gr;
+      cx.beginPath();cx.arc(f.x,f.y,f.size*2.4,0,Math.PI*2);cx.fill();
+      cx.restore();
     }
-    // 水面涟漪
-    cx.save();cx.globalAlpha=alpha*0.25;
+    let alpha=f.alpha*(1-f.depth)*0.5;
+    let rx=Math.max(16,Math.min(f.size*4+12,80));
+    cx.save();
+    cx.globalAlpha=alpha;
+    let g=cx.createRadialGradient(f.x,f.y,0,f.x,f.y,rx);
+    g.addColorStop(0,'rgba(3,9,18,0.55)');
+    g.addColorStop(0.55,'rgba(3,9,18,0.28)');
+    g.addColorStop(1,'rgba(3,9,18,0)');
+    cx.fillStyle=g;
+    cx.beginPath();
+    cx.ellipse(f.x,f.y,rx,rx*0.46,0,0,Math.PI*2);
+    cx.fill();
+    cx.restore();
+    // 水面涟漪（表示水下有东西在动）
+    cx.save();cx.globalAlpha=alpha*0.5;
     cx.strokeStyle='rgba(255,255,255,0.4)';cx.lineWidth=1;
     let off=Math.sin(Date.now()*0.003+f.wobble)*5;
     cx.beginPath();cx.arc(f.x+off,surfaceY,3+f.size/5,0,Math.PI*2);cx.stroke();
     cx.restore();
-    if(Math.random()>0.85)spawnBubble(f.x+(Math.random()-0.5)*30,surfaceY);
+    if(Math.random()>0.9)spawnBubble(f.x+(Math.random()-0.5)*30,surfaceY);
+    // 黄金鱼：上升金粒子（冒出金光）
+    if(f.golden){
+      cx.save();
+      for(let k=0;k<5;k++){
+        let ph=(f.wobble*3+k*1.256)%(Math.PI*2);
+        let py=f.y-((ph/Math.PI)*f.size*2);
+        let px=f.x+Math.sin(ph+k)*f.size*0.6;
+        let pa=0.75*(1-ph/(Math.PI*2));
+        cx.fillStyle='rgba(255,228,120,'+pa.toFixed(3)+')';
+        cx.beginPath();cx.arc(px,py,3,0,Math.PI*2);cx.fill();
+      }
+      cx.restore();
+    }
   });
 }
 
@@ -2659,15 +3373,21 @@ function update(ts){
   deltaTime=Math.min((ts-lastTime)/1000,0.1);
   lastTime=ts;
   if(G.paused){lastTime=ts;return;}
-  // 岛屿模式：冻结所有钓鱼逻辑，只更新动画时间
+  // 岛屿模式：冻结所有钓鱼逻辑，只更新动画时间（时间暂停）
   if(G.islandMode){islandAnimTime+=deltaTime;return;}
+  // 种鱼模式：时间照常流动（鱼苗生长依赖全局时钟），只更新池塘界面
+  if(G.gardenMode){islandAnimTime+=deltaTime;tickGlobalClock(deltaTime);updateGardenUI();return;}
+
+  // ===== 全局时钟推进（参考星露谷流速）=====
+  tickGlobalClock(deltaTime);
+
   ww+=0.02;
 
   diveUpdate(deltaTime);
 
   // 冒险模式：危险值随时间和钓鱼累积
   if(adv.active&&!adv.dayEnded&&!adv.gameOver&&G.phase==='idle'){
-    adv.danger=Math.min(100,adv.danger+DANGER_TIME*deltaTime);
+    adv.danger=Math.min(100,adv.danger+DANGER_TIME*deltaTime*timeScale);
     checkDanger();
     updateAdvHUD();
   }
@@ -2678,7 +3398,9 @@ function update(ts){
     if(disasterFX.timer>3.2){disasterFX.active=false;disasterFX.paused=false;
       sfx_disaster_ambient_stop();
       if(disasterFX.type==='loss_25_end'||disasterFX.type==='tornado'){
-        setTimeout(()=>{if(!adv.dayEnded)endDay();},500);
+        // 龙卷强制收竿：直接结算并进入下一天（旧代码用 !adv.dayEnded 判断，
+        // 而灾难本身已把 dayEnded 置 true，导致这个自动换天永远不触发，只能卡到你手动回家）
+        setTimeout(()=>{endDay();},500);
       }
     }
   }
@@ -2693,6 +3415,7 @@ function update(ts){
   if(candyBird.active){
     candyBird.timer+=deltaTime;
     if(candyBird.shakeTimer>0)candyBird.shakeTimer=Math.max(0,candyBird.shakeTimer-deltaTime*3);
+    if(candyBird.popTimer>0)candyBird.popTimer=Math.max(0,candyBird.popTimer-deltaTime*3.2);
     if(candyBird.phase==='appearing'){
       candyBird.size=Math.min(1,candyBird.size+deltaTime*4);
       if(candyBird.size>=1)candyBird.phase='waiting';
@@ -2758,7 +3481,7 @@ function update(ts){
       tongueState.progress-=deltaTime*8;
       if(tongueState.progress<=0){
         tongueState.progress=0;tongueState.active=false;tongueState.phase='idle';
-        tongueState.hitTreasure=null;
+        tongueState.hitTreasure=null;tongueState.candyLick=false;
       }
     }
   }
@@ -2791,9 +3514,19 @@ function update(ts){
   fishes.forEach(f=>{f.x+=f.speed*deltaTime;f.wobble+=0.02;});
   maintainFishSchool();
 
-  // 钓点生命周期（连续倒计时）
+  // 钓点生命周期（连续倒计时）+ 缓慢游动
   levelSpotTimer+=deltaTime;
-  spots.forEach(s=>{if(!s.clicked&&G.phase==='idle')s.life-=deltaTime;});
+  spots.forEach(s=>{
+    if(!s.clicked&&G.phase==='idle')s.life-=deltaTime;
+    s.age=(s.age||0)+deltaTime;
+    if(s.minX===undefined)return;
+    // 横向缓慢游动，碰到边界折返
+    s.x+=(s.vx||0)*deltaTime;
+    if(s.x<s.minX){s.x=s.minX;s.vx=Math.abs(s.vx||0);s.dir=1;}
+    if(s.x>s.maxX){s.x=s.maxX;s.vx=-Math.abs(s.vx||0);s.dir=-1;}
+    // 上下轻轻起伏（像活物一样）
+    if(s.baseY!==undefined)s.y=s.baseY+Math.sin(s.age*(s.bobSpeed||0.5)+s.swimPhase)*s.bobAmp;
+  });
   if(levelSpotTimer>2.5&&G.phase==='idle'){
     levelSpotTimer=0;
     spawnSpots();
@@ -2852,9 +3585,14 @@ function update(ts){
     frog.targetEyeDX= cosA*edx/ed + sinA*edy/ed;
     frog.targetEyeDY=-sinA*edx/ed + cosA*edy/ed;
 
-    // 检测悬停钓点（半径加大到75px，更容易触发）
-    let cs=null,cd=75;
-    for(let sp of spots){if(sp.clicked||sp.life<=0)continue;let d=Math.hypot(sp.x-mouseX,sp.y-mouseY);if(d<cd){cd=d;cs=sp;}}
+    // 检测悬停鱼影（判定范围随鱼影大小变化）
+    let cs=null,cd=0;
+    for(let sp of spots){
+      if(sp.clicked||sp.life<=0)continue;
+      let d=Math.hypot(sp.x-mouseX,sp.y-mouseY);
+      let rr=Math.max(62,(sp.size||20)*1.7);
+      if(d<rr&&(cs===null||d<cd)){cd=d;cs=sp;}
+    }
     if(cs){
       if(cs.isFake){
         // 假钓点：嫌弃
@@ -2874,12 +3612,13 @@ function update(ts){
       }
       frog.catchReact=1; // 持续显示悬停表情
     }else{frog.targetGrade=0; frog.targetBelly=1; frog.targetEyeSize=1;frog.reactType='';frog.catchReact=0;}
-    // 教程第3步：玩家悬停钓点触发反应 → 鼓励提示
-    if(G.tutorial===2&&document.getElementById('tutorialOverlay').classList.contains('active')){
+    // 操作门控教学：玩家悬停鱼影即完成"看青蛙反应"这一步
+    if(document.getElementById('tutorialOverlay').classList.contains('active')){
       if(frog.targetGrade>=3&&!G._tutHinted){
         G._tutHinted=true;
         toast('🐸 看！青蛙在告诉你这条鱼的等级！鱼越贵反应越夸张！','gold');
       }
+      tutComplete('hover_spot');
     }
   }
   // 舌头收放
@@ -2896,6 +3635,7 @@ function recordIncome(v){
   G.coins+=v;
   G.totalEarned+=v;
   if(adv.active)adv.dayEarned+=v;
+  dailyProgress('earn',Math.round(v));
 }
 // 常驻可拖拽目标 HUD 刷新（剩余天数/进度/还差多少钱）
 function updateGoalHUD(){
@@ -2904,8 +3644,12 @@ function updateGoalHUD(){
   let remain=Math.max(0,GOAL_DAYS-G.gameDay);
   let gd=document.getElementById('ghDay');
   if(gd){
-    if(remain<=10&&G.gameDay>0)gd.innerHTML='⏳ <span class="warn">仅剩 '+remain+' 天！</span> 冲刺 100 万';
-    else gd.textContent='⏳ 剩余 '+remain+' / '+GOAL_DAYS+' 天';
+    let tod=getTimeOfDay(G.gameDay);
+    let clockTxt=getTimeEmoji(tod)+' '+getTimeName(tod)+' '+clockStr();
+    let dayLine;
+    if(remain<=10&&G.gameDay>0)dayLine='⏳ <span class="warn">仅剩 '+remain+' 天！</span> 冲刺 100 万';
+    else dayLine='⏳ 剩余 '+remain+' / '+GOAL_DAYS+' 天';
+    gd.innerHTML=dayLine+'　<span class="gh-clock">'+clockTxt+'</span>';
   }
   let ge=document.getElementById('ghEarned');if(ge)ge.textContent=G.totalEarned.toLocaleString();
   let gb=document.getElementById('ghBar');if(gb)gb.style.width=Math.min(100,(G.totalEarned/GOAL_TARGET)*100)+'%';
@@ -2987,6 +3731,8 @@ function showGoalOverlay(win){
   if(s)s.textContent=win?'恭喜！它在彩虹中展翅，实现愿望的传说青蛙苏醒了':'未能攒够 100 万，传说就此落幕。';
   let ge=document.getElementById('goalEarned2');if(ge)ge.textContent=G.totalEarned.toLocaleString();
   let gd=document.getElementById('goalDays2');if(gd)gd.textContent=Math.min(G.gameDay,GOAL_DAYS);
+  let gc=document.getElementById('goalClock');
+  if(gc){let tod=getTimeOfDay(G.gameDay);gc.textContent=getTimeEmoji(tod)+' '+getTimeName(tod)+' · '+clockStr();}
   if(win&&typeof sfx_reveal_UR==='function')sfx_reveal_UR();
   else if(typeof sfx_reveal_N==='function')sfx_reveal_N();
 }
@@ -3010,6 +3756,7 @@ function levelFailFlow(){
   if(G.gameEnded||adv.active)return;
   if(levelComplete_d)return;
   G.gameDay++;
+  resetClockToMorning();
   updateGoalHUD();
   toast('💔 挑战失败…消耗 1 天，整理心情再战！','red');
   sfx_reveal_N();
@@ -3033,6 +3780,7 @@ function updateUI(){
   if(G.buffs.luckyBait>0)buffs.push('🍀x'+G.buffs.luckyBait);
   if(G.buffs.frogPower>0)buffs.push('🥤x'+G.buffs.frogPower);
   buffEl.textContent=buffs.length>0?'💠 '+buffs.join(' '):'';
+  updateRedDots();
 }
 
 function updateButtons(){
@@ -3108,9 +3856,10 @@ function setupInput(){
         b.clicks++;
         b.shakeTimer=Math.min(1,b.shakeTimer+0.5);
         sfx_candy_bird_lick();
-        for(let i=0;i<12;i++){
-          particlePool.push({x:b.x+(Math.random()-0.5)*50,y:b.y+(Math.random()-0.5)*50,vx:(Math.random()-0.5)*150,vy:(Math.random()-0.5)*150-80,life:0.6,color:'hsl('+(Math.random()*360)+',90%,70%)'});
-        }
+        lickCandyBird(b);
+        spawnParticles(b.x,b.y,'#FFD700',6,2.4,0.7);
+        spawnParticles(b.x,b.y,'#FF69B4',6,2.6,0.7);
+        spawnParticles(b.x,b.y,'#87CEFA',5,2.2,0.7);
         if(b.clicks>=b.maxClicks){
           b.phase='success';b.timer=0;
           sfx_candy_bird_done();
@@ -3122,9 +3871,8 @@ function setupInput(){
           G.buffs.rareBoost=(G.buffs.rareBoost||0)+3;
           updateUI();
           toast('🦜 糖果鸟吃饱了！奖励'+amt+'💰 + 稀有度提升3次！','gold');
-          for(let i=0;i<25;i++){
-            particlePool.push({x:b.x+(Math.random()-0.5)*60,y:b.y+(Math.random()-0.5)*60,vx:(Math.random()-0.5)*200,vy:(Math.random()-0.5)*200-100,life:0.8,color:'hsl('+(Math.random()*360)+',90%,70%)'});
-          }
+          spawnParticles(b.x,b.y,'#FFD700',25,5,1.0);
+          spawnParticles(b.x,b.y,'#FF69B4',14,4.4,1.0);
         }
         return;
       }
@@ -3137,15 +3885,17 @@ function setupInput(){
 
     // 空闲状态：检测是否点击了钓点
     if(G.phase==='idle'){
-      // 遍历所有活跃钓点，检测点击
-      let hitSpot=null;
+      // 遍历所有活跃鱼影，检测点击（判定范围随鱼影大小变化）
+      let hitSpot=null,hitD=0;
       for(let s of spots){
         if(s.clicked||s.life<=0)continue;
         let dist=Math.hypot(s.x-mx,s.y-my);
-        if(dist<30){hitSpot=s;break;}
+        let rr=Math.max(28,(s.size||20)*1.5);
+        if(dist<rr&&(!hitSpot||dist<hitD)){hitSpot=s;hitD=dist;}
       }
       if(hitSpot){
-        castX=hitSpot.x;castY=Math.min(hitSpot.y,H*WL+10);
+        castX=hitSpot.x;castY=hitSpot.y;
+        castSurfaceY=(hitSpot.zone==='water')?H*WL:hitSpot.y;
         castRipple=1;
         // 延迟一帧投竿
         setTimeout(()=>castAtSpot(hitSpot),50);
@@ -3153,14 +3903,14 @@ function setupInput(){
       }
       // 点击非钓点区域 => 伸出舌头探索
       if(!tongueState.active&&G.phase==='idle'){
-        let mouthX=rodTip?rodTip.x:stick.handX+42*Math.min(W,H)/800;
-        let mouthY=rodTip?rodTip.y:stick.handY-26*Math.min(W,H)/800;
+        let mouth=frogMouthPos();
+        let mouthX=mouth.x,mouthY=mouth.y;
         let dist=Math.hypot(mx-mouthX,my-mouthY);
-        if(dist<W*0.8){ // 允许几乎全屏舔
+        if(dist<=Math.hypot(W,H)*1.05){ // 允许全屏（含对角）舔，水下也能摸到
           tongueState.active=true;tongueState.phase='extending';
           tongueState.startX=mouthX;tongueState.startY=mouthY;
           tongueState.targetX=mx;tongueState.targetY=my;
-          tongueState.progress=0;tongueState.hitTreasure=null;
+          tongueState.progress=0;tongueState.hitTreasure=null;tongueState.candyLick=false;
           sfx_tongue_shoot();
           return;
         }
@@ -3197,7 +3947,7 @@ function doPull(count){
   let spot;
   if(activeSpots.length>0){
     spot=activeSpots[Math.floor(Math.random()*activeSpots.length)];
-    castX=spot.x;castY=Math.min(spot.y,H*WL+10);
+    castX=spot.x;castY=spot.y;castSurfaceY=H*WL;
     clickTarget_d=spot;
     if(spot.isFake){
       let results=[{isFake:true,decoy:DECOYS[Math.floor(Math.random()*DECOYS.length)],rarity:'N'}];
@@ -3227,7 +3977,7 @@ function doPull(count){
   }
   // 没有钓点，刷新一批
   spawnSpots();
-  toast('🎣 请点击画面上的发光钓点来钓鱼','blue');
+  toast('🎣 点击水里游动的黑色鱼影来钓鱼','blue');
 }
 
 function closeReveal(){
@@ -3247,7 +3997,7 @@ window.addEventListener('resize',()=>resize());
 
 function addFrogXp(rarity){let xp=FROG_XP[rarity]||1;frogXp+=xp;while(frogLv<5&&frogXp>=FROG_CFG[frogLv-1].xp){frogXp-=FROG_CFG[frogLv-1].xp;frogLv++;let c=FROG_CFG[frogLv-1];frogXpNext=c.xp;toast('🐸 青蛙升级！'+c.name+' Lv.'+frogLv+' (成功率'+(c.rate*100)+'%)','gold');sfx_reveal_SR();}updateFrogUI();}
 function updateFrogUI(){let c=FROG_CFG[frogLv-1];let cx=frogXp,mx=c.xp;if(frogLv>=5){cx=1;mx=1;}let p=Math.min(100,(cx/mx)*100);let b=document.getElementById('frogLvBar');if(b){b.style.width=p+'%';b.className=frogLv>=5?'gtb-frog-xp-bar max':'gtb-frog-xp-bar';}let t=document.getElementById('frogLvTxt');if(t)t.textContent='Lv.'+frogLv;let r=document.getElementById('frogRateTxt');if(r)r.textContent=Math.round(c.rate*100)+'%';let ml=document.getElementById('mpFrogLv');if(ml)ml.textContent='青蛙 Lv.'+frogLv+' '+c.name;let mr=document.getElementById('mpFrogRate');if(mr)mr.textContent='成功率 '+(c.rate*100)+'%';let ub=document.getElementById('btnFrogUpgrade');if(ub){if(frogLv>=5){ub.style.display='none';}else{ub.style.display='inline-block';ub.textContent='🐸 升级青蛙 · '+FROG_UPGRADE_COST[frogLv]+'💰';if(G.coins<FROG_UPGRADE_COST[frogLv])ub.classList.add('disabled');else ub.classList.remove('disabled');}}}
-function upgradeFrog(){if(frogLv>=5){toast('🐸 青蛙已达最高等级！','gold');return;}let cost=FROG_UPGRADE_COST[frogLv];if(G.coins<cost){toast('💰 金币不足！需要 '+cost+'💰','gold');return;}G.coins-=cost;frogXp=0;frogLv++;let c=FROG_CFG[frogLv-1];frogXpNext=c.xp;toast('🐸 青蛙升级！'+c.name+' Lv.'+frogLv+' (成功率'+(c.rate*100)+'%)','gold');sfx_reveal_SR();saveGame();updateFrogUI();updateUI();}
+function upgradeFrog(){if(frogLv>=5){toast('🐸 青蛙已达最高等级！','gold');return;}let cost=FROG_UPGRADE_COST[frogLv];if(G.coins<cost){toast('💰 金币不足！需要 '+cost+'💰','gold');return;}G.coins-=cost;frogXp=0;frogLv++;tutComplete('upgrade_frog');let c=FROG_CFG[frogLv-1];frogXpNext=c.xp;toast('🐸 青蛙升级！'+c.name+' Lv.'+frogLv+' (成功率'+(c.rate*100)+'%)','gold');sfx_reveal_SR();saveGame();updateFrogUI();updateUI();}
 function checkDanger(){
   if(!adv.active||adv.dayEnded||adv.gameOver)return;
   let d=adv.danger;
@@ -3270,7 +4020,7 @@ function checkDanger(){
   }
   if(d>=DANGER_DOOM){
     if(!disasterFX.active){
-      if(Math.random()<DANGER_DISASTER_CHANCE/60){
+      if(Math.random()<DANGER_DISASTER_CHANCE/60*timeScale){
         triggerDisaster();
       }
     }
@@ -3319,7 +4069,7 @@ function triggerDisaster(){
     case 'loss_35':dmg=Math.floor(adv.dayEarned*0.35);adv.dayEarned=Math.max(0,adv.dayEarned-dmg);G.coins=Math.max(0,G.coins-dmg);adv.penaltyToday+=dmg;break;
     case 'loss_25_end':dmg=Math.floor(adv.dayEarned*0.25);adv.dayEarned=Math.max(0,adv.dayEarned-dmg);G.coins=Math.max(0,G.coins-dmg);adv.penaltyToday+=dmg;adv.dayEnded=true;break;
     case 'lose_day':dmg=adv.dayEarned;adv.dayEarned=0;G.coins=Math.max(0,G.coins-dmg);adv.penaltyToday+=dmg;break;
-    case 'casts_5':adv.dayCasts=Math.max(adv.dayCasts,ADV_CASTS_PER_DAY-5);break;
+    case 'loss_10':dmg=Math.floor(adv.dayEarned*0.1);adv.dayEarned=Math.max(0,adv.dayEarned-dmg);G.coins=Math.max(0,G.coins-dmg);adv.penaltyToday+=dmg;break;
     case 'loss_15_stun':dmg=Math.floor(adv.dayEarned*0.15);adv.dayEarned=Math.max(0,adv.dayEarned-dmg);G.coins=Math.max(0,G.coins-dmg);adv.penaltyToday+=dmg;disasterFX.paused=true;setTimeout(()=>{if(disasterFX.paused){disasterFX.paused=false;disasterFX.timer=2.6;}},3000);break;
   }
   let msg=picked.msg.replace('{amt}',dmg);
@@ -3472,7 +4222,7 @@ function triggerGoodEvent(){
     candyBird.active=true;candyBird.timer=0;candyBird.clicks=0;
     candyBird.x=W*0.3+Math.random()*W*0.4;
     candyBird.y=H*0.15+Math.random()*H*0.2;
-    candyBird.phase='appearing';candyBird.size=0.01;candyBird.shakeTimer=0;
+    candyBird.phase='appearing';candyBird.size=0.01;candyBird.shakeTimer=0;candyBird.popTimer=0;
     toast(picked.icon+' '+picked.name+'：'+picked.desc,'gold');
     sfx_candy_bird_appear();
     return;
@@ -3614,6 +4364,23 @@ function drawGoodEventFX(){
     }
   }
 }
+// 青蛙嘴的位置（伸舌头的起点）
+function frogMouthPos(){
+  let sc=Math.min(W,H)/800;
+  return {x:rodTip?rodTip.x:stick.handX+42*sc, y:rodTip?rodTip.y:stick.handY-26*sc};
+}
+// 点糖果鸟 → 青蛙真的把舌头甩出去舔一口（视觉反馈）
+function lickCandyBird(b){
+  let mouth=frogMouthPos();
+  tongueState.active=true;tongueState.phase='extending';
+  tongueState.startX=mouth.x;tongueState.startY=mouth.y;
+  tongueState.targetX=b.x;tongueState.targetY=b.y;
+  tongueState.progress=0;tongueState.hitTreasure=null;tongueState.candyLick=true;
+  b.popTimer=1;
+  sfx_tongue_shoot();
+  treasureCollectAnim.push({x:b.x,y:b.y-6,life:0.9,maxLife:0.9,color:'#FF69B4',icon:'💋'});
+}
+
 function drawCandyBird(){
   if(!candyBird.active)return;
   let b=candyBird;
@@ -3622,6 +4389,10 @@ function drawCandyBird(){
   let x=b.x,y=b.y;
   let shakeX=b.shakeTimer>0?Math.sin(b.shakeTimer*60)*8*b.shakeTimer:0;
   x+=shakeX;
+  // 被舔到时的弹起+膨胀反馈
+  let pop=b.popTimer>0?b.popTimer:0;
+  y-=Math.sin(pop*Math.PI)*14*pop;
+  s*=1+0.14*pop;
 
   // 翅膀飘动
   let wingAngle=Math.sin(performance.now()*0.005)*0.35;
@@ -3825,9 +4596,252 @@ function spawnHiddenTreasure(){
 }
 function endDay(){if(!adv.active||adv.gameOver)return;adv.dayEnded=true;
   if(checkGoal())return; // 已赚到 100 万 → 立即胜利
-  let pe=adv.dayEarned;adv.day++;G.gameDay=Math.max(G.gameDay,adv.day);adv.timeOfDay=getTimeOfDay(adv.day);adv.dayEarned=0;adv.dayCasts=0;levelCasts=0;adv.penaltyToday=0;adv.danger=Math.max(0,adv.danger*0.3);diveState.sessionsLeft=3;updateDiveBtn();adv.dayEnded=false;adv._warnedWarn=false;adv._warnedDanger=false;adv._triggeredDoom=false;spots=[];levelSpotTimer=0;hiddenTreasures=[];treasureSpawnTimer=0;treasureCollectAnim=[];tongueState.active=false;tongueState.phase='idle';adv.fishBag=[];adv.plantedVeg=adv.plantedVeg||[];adv.plantedFish=adv.plantedFish||[];processIslandHarvest();
+  let pe=adv.dayEarned;adv.day++;G.gameDay=Math.max(G.gameDay,adv.day);resetClockToMorning();adv.dayEarned=0;adv.dayCasts=0;levelCasts=0;adv.penaltyToday=0;adv.danger=Math.max(0,adv.danger*0.3);diveState.sessionsLeft=3;updateDiveBtn();adv.dayEnded=false;adv._warnedWarn=false;adv._warnedDanger=false;adv._triggeredDoom=false;spots=[];levelSpotTimer=0;hiddenTreasures=[];treasureSpawnTimer=0;treasureCollectAnim=[];tongueState.active=false;tongueState.phase='idle';adv.fishBag=[];adv.plantedVeg=adv.plantedVeg||[];adv.plantedFish=adv.plantedFish||[];processIslandHarvest();
   if(checkGoal())return; // 已用满 100 天仍未达标 → 失败
   let todEmoji=getTimeEmoji(adv.timeOfDay);toast(todEmoji+' 第'+adv.day+'天 (+'+pe.toLocaleString()+'💰) 开始！还差'+Math.max(0,Math.ceil((GOAL_TARGET-G.totalEarned)/10000))+'万','gold');sfx_reveal_R();updateAdvHUD();updateGoalHUD();updateUI();updateButtons();}
+
+// ============ 种鱼模式（Fish Farm）============
+// 解锁条件：冒险 / 闯关模式累计成功钓鱼达到 GARDEN_UNLOCK_CAUGHT 条
+function isGardenUnlocked(){return !!G.gardenUnlocked||G.totalCaught>=GARDEN_UNLOCK_CAUGHT;}
+function findFishById(id){return FISH_POOL.find(f=>f.id===id)||null;}
+// 钓到鱼 → 获得 1 颗对应鱼苗
+function grantSeedling(fish){
+  if(!fish||!fish.id)return;
+  G.seedlings[fish.id]=(G.seedlings[fish.id]||0)+1;
+}
+// 达到条件即解锁，并刷新主菜单卡片
+function checkGardenUnlock(){
+  updateGardenCardUI();
+  if(G.gardenUnlocked||G.totalCaught<GARDEN_UNLOCK_CAUGHT)return;
+  G.gardenUnlocked=true;
+  G.gardenTutPending=true;   // 首次进入种鱼模式时弹出玩法教学
+  updateGardenCardUI();
+  toast('🐠 种鱼模式已解锁！进入后会有玩法教学','gold');
+  sfx_reveal_R();
+  setTimeout(()=>{
+    toast('🎓 新玩法：点主菜单「🐠 种鱼模式」查看教学','blue');
+    updateRedDots();
+  },1800);
+}
+// ===== 种鱼模式教学（解锁引导 / 随时可重看）=====
+function openGardenTutorial(fromButton){
+  let ov=document.getElementById('gardenTutOverlay');
+  if(!ov)return;
+  if(!isGardenUnlocked()&&!fromButton){
+    toast('🔒 种鱼模式还没解锁哦','blue');return;
+  }
+  G.gardenTutStep=0;G.gardenTutSeen=true;
+  ov.classList.add('active');
+  renderGardenTutStep();
+  let gb=document.getElementById('gardenGuideBtn');
+  if(gb)gb.classList.remove('blink');
+  updateRedDots();saveGame(true);
+}
+function renderGardenTutStep(){
+  let i=Math.max(0,Math.min(gardenTutorialSteps.length-1,G.gardenTutStep||0));
+  let st=gardenTutorialSteps[i];
+  let ic=document.getElementById('gtutIcon');if(ic)ic.textContent=st.icon;
+  let ti=document.getElementById('gtutTitle');if(ti)ti.textContent=st.title;
+  let de=document.getElementById('gtutDesc');if(de)de.innerHTML=st.desc+(st.hint?'<div class="gtut-hint">🎯 操作任务：'+st.hint+'</div>':'');
+  let dots=document.getElementById('gtutDots');
+  if(dots){dots.innerHTML=gardenTutorialSteps.map((_,k)=>`<div class="gdot${k===i?' active':''}"></div>`).join('');}
+  let nb=document.getElementById('gtutNextBtn');
+  if(nb){
+    let last=i>=gardenTutorialSteps.length-1;
+    if(st.action==='start'){
+      nb.disabled=false;nb.style.opacity=1;nb.textContent='✅ 开始种鱼！';
+    }else if(!G._gtutDone){
+      nb.disabled=true;nb.style.opacity=0.4;nb.textContent='⏳ 请先完成上面的操作…';
+    }else{
+      nb.disabled=false;nb.style.opacity=1;nb.textContent=last?'✅ 开始种鱼！':'继续 ➡️';
+    }
+  }
+}
+function nextGardenTut(){
+  G._gtutDone=false;
+  if((G.gardenTutStep||0)>=gardenTutorialSteps.length-1){closeGardenTut();return;}
+  G.gardenTutStep=(G.gardenTutStep||0)+1;
+  renderGardenTutStep();
+}
+function skipGardenTut(){closeGardenTut();}
+function closeGardenTut(){
+  let ov=document.getElementById('gardenTutOverlay');if(ov)ov.classList.remove('active');
+  G.gardenTutPending=false;G.gardenTutSeen=true;
+  let gb=document.getElementById('gardenGuideBtn');if(gb)gb.classList.remove('blink');
+  updateRedDots();saveGame(true);
+}
+// 生长时间：越贵的鱼需要种的时间越久（单位：游戏内分钟）
+function growMinForFish(fish){
+  let v=(fish&&typeof fish.v==='number')?fish.v:100;
+  return Math.max(30,Math.round(20+v*0.14));
+}
+function seedlingList(){
+  return Object.keys(G.seedlings).map(id=>({fish:findFishById(id),count:G.seedlings[id]}))
+    .filter(x=>x.fish&&x.count>0).sort((a,b)=>(a.fish.r||0)-(b.fish.r||0));
+}
+function gardenProgress(plot){
+  if(!plot||!plot.growMin)return 1;
+  return Math.max(0,Math.min(1,(G.worldTime-plot.plantTime)/plot.growMin));
+}
+function gardenReady(plot){return gardenProgress(plot)>=1;}
+function gardenRemainText(plot){
+  let left=Math.max(0,plot.growMin-(G.worldTime-plot.plantTime)); // 剩余游戏内分钟
+  if(left<=0)return '已成熟';
+  let real=left/CLOCK_MIN_PER_SEC; // 折算为真实秒
+  let mm=Math.floor(real/60),ss=Math.round(real%60);
+  return mm>0?(mm+'分'+String(ss).padStart(2,'0')+'秒'):(ss+'秒');
+}
+// 种植：把一颗鱼苗放入空鱼塘
+function gardenPlant(fishId){
+  if(!isGardenUnlocked())return;
+  if(!G.seedlings[fishId]){toast('没有该鱼苗','red');return;}
+  if(G.gardenPlots.length>=GARDEN_PLOTS){toast('鱼塘已满，请先收获','red');return;}
+  let fish=findFishById(fishId);if(!fish)return;
+  G.seedlings[fishId]--;
+  if(G.seedlings[fishId]<=0)delete G.seedlings[fishId];
+  G.gardenPlots.push({fishId:fishId,plantTime:G.worldTime,growMin:growMinForFish(fish),_shownReady:false});
+  sfx_reveal_N();
+  toast('🌱 种下 '+fish.e+' '+fish.n+'，约 '+growMinForFish(fish)+' 游戏分钟后成熟','blue');
+  gardenBuild();
+}
+// 收获：成熟后获得金币（只进 coins，不计入百万目标，与岛上种鱼一致）
+function gardenHarvest(idx){
+  let plot=G.gardenPlots[idx];if(!plot||!gardenReady(plot))return;
+  let fish=findFishById(plot.fishId);
+  let reward=fish?Math.max(10,Math.round((fish.v||100)*(1+0.4*(plot.growMin/240)))):50;
+  G.coins+=reward;
+  toast('🐠 收获 '+(fish?fish.e+' '+fish.n:'鱼')+'，+'+reward.toLocaleString()+'💰','gold');
+  gtutComplete('harvest');
+  sfx_reveal_SR();
+  G.gardenPlots.splice(idx,1);
+  updateUI();gardenBuild();
+}
+// 主菜单卡片：未解锁显示灰色问号（神秘模式），解锁后显示种鱼模式
+function updateGardenCardUI(){
+  let card=document.getElementById('mpGardenCard');if(!card)return;
+  let icon=card.querySelector('.mp-icon');
+  let title=card.querySelector('.mp-card-title');
+  let desc=document.getElementById('mpGardenDesc');
+  let features=document.getElementById('mpGardenFeatures');
+  if(isGardenUnlocked()){
+    card.classList.remove('mp-mystery');card.classList.add('mp-garden');
+    if(icon)icon.textContent='🐠';
+    if(title)title.textContent='种鱼模式';
+    if(desc)desc.textContent='种下鱼苗 · 越贵的鱼成熟越慢';
+    if(features)features.innerHTML='<span>✓</span> 钓到的鱼变鱼苗<br><span>✓</span> 成熟后收获金币<br><span>✓</span> 时间随全局时钟流动<br><span>✓</span> 与冒险/闯关并行'
+      +(G.gardenTutSeen?'':'<br><span>🎓</span> <b style="color:#FFD700">新玩法教学待查看</b>');
+    if(typeof updateRedDots==='function')updateRedDots();
+  }else{
+    card.classList.add('mp-mystery');card.classList.remove('mp-garden');
+    if(icon)icon.textContent='❓';
+    if(title)title.textContent='神秘模式';
+    if(desc)desc.textContent='??? 未知的模式';
+    if(features)features.innerHTML='<span>🔒</span> 成功钓鱼 3 次后解锁<br><span>🔒</span> 当前进度 '+Math.min(G.totalCaught,GARDEN_UNLOCK_CAUGHT)+' / '+GARDEN_UNLOCK_CAUGHT;
+  }
+}
+function openGardenMode(){
+  if(!isGardenUnlocked()){
+    toast('🔒 神秘模式：在冒险或闯关模式成功钓鱼 '+GARDEN_UNLOCK_CAUGHT+' 次后解锁（'+G.totalCaught+'/'+GARDEN_UNLOCK_CAUGHT+'）','blue');
+    return;
+  }
+  G.gardenMode=true;G.islandMode=false;
+  if(G.paused){G.paused=false;let po=document.getElementById('pauseOverlay');if(po)po.classList.remove('active');lastTime=0;}
+  ['modePick'].forEach(id=>{let e=document.getElementById(id);if(e)e.classList.add('hidden');});
+  let mb=document.getElementById('menuBackBtn');if(mb)mb.classList.add('show');
+  let fh=document.getElementById('fishingHud');if(fh)fh.classList.remove('active');
+  let bb=document.getElementById('bottomBar');if(bb)bb.classList.add('hidden');
+  let li=document.getElementById('levelIndicator');if(li)li.style.display='none';
+  let pd=document.getElementById('pityDisplay');if(pd)pd.style.display='none';
+  let hb=document.getElementById('hudBuffs');if(hb)hb.style.display='none';
+  let gt=document.getElementById('gameTitle');if(gt)gt.style.display='none';
+  let ro=document.getElementById('resultsOverlay');if(ro)ro.classList.remove('active');
+  adv.timeOfDay=getTimeOfDay();
+  let gui=document.getElementById('gameUI');if(gui)gui.classList.add('hidden');
+  // 补充装饰性游鱼（若从菜单进入则鱼群为空）
+  if(!fishes.length){for(let i=0;i<8;i++){let f=FISH_POOL[Math.floor(Math.random()*FISH_POOL.length)];let dir=Math.random()>0.5?1:-1;fishes.push({fish:f,dir:dir,speed:(28+Math.random()*152)*dir,size:f.w[0]+Math.random()*(f.w[1]-f.w[0])*0.5,color:f.c,emoji:f.e,y:H*WL+H*0.04+Math.random()*H*0.3,x:Math.random()*W,alive:true,wobble:Math.random()*Math.PI*2,depth:0.3+Math.random()*0.7,alpha:0.3+Math.random()*0.4});}}
+  let ov=document.getElementById('gardenOverlay');if(ov)ov.classList.add('active');
+  gardenBuild();updateGardenUI();
+  // 首次进入（或刚解锁）自动弹玩法教学
+  if(!G.gardenTutSeen||G.gardenTutPending){
+    setTimeout(()=>{if(G.gardenMode)openGardenTutorial(true);},420);
+  }
+}
+function closeGardenMode(){
+  G.gardenMode=false;
+  let to=document.getElementById('gardenTutOverlay');if(to)to.classList.remove('active');
+  let ov=document.getElementById('gardenOverlay');if(ov)ov.classList.remove('active');
+  let mp=document.getElementById('modePick');if(mp)mp.classList.remove('hidden');
+  let mb=document.getElementById('menuBackBtn');if(mb)mb.classList.remove('show');
+  let gt=document.getElementById('gameTitle');if(gt)gt.style.display='';
+  updateGardenCardUI();updateUI();
+}
+// 构建鱼塘 + 鱼苗背包 DOM
+function gardenBuild(){
+  let plotsEl=document.getElementById('gardenPlots');
+  if(plotsEl){
+    plotsEl.innerHTML='';
+    for(let i=0;i<GARDEN_PLOTS;i++){
+      let plot=G.gardenPlots[i];
+      let div=document.createElement('div');div.className='gplot';div.id='gplot'+i;
+      div.addEventListener('mouseenter',()=>gtutComplete('hover_plot'));
+      if(plot){
+        let fish=findFishById(plot.fishId);
+        let p=gardenProgress(plot),ready=p>=1;
+        plot._shownReady=ready;
+        if(ready)div.classList.add('ready');
+        div.style.setProperty('--swim',(3.2+(i%3)*0.6).toFixed(1)+'s');
+        let bubbles='';
+        for(let b=0;b<3;b++){
+          bubbles+='<div class="gplot-bubble" style="left:'+(18+b*28)+'%;--bd:'+(2.4+b*0.5).toFixed(1)+'s;animation-delay:'+(b*0.8).toFixed(1)+'s"></div>';
+        }
+        div.innerHTML='<div class="gplot-pond"><div class="gplot-emoji">'+(fish?fishImgHtml(fish,'gplot-fish-img'):'🐟')+'</div>'+bubbles+'</div>'
+          +'<div class="gplot-name">'+(fish?fish.n:'???')+'</div>'
+          +'<div class="gplot-bar"><div class="gplot-fill" id="gplotFill'+i+'" style="width:'+(p*100).toFixed(1)+'%"></div></div>'
+          +'<div class="gplot-time" id="gplotTime'+i+'">'+(ready?'✅ 可收获':('⏳ '+gardenRemainText(plot)))+'</div>';
+        if(ready)div.onclick=()=>gardenHarvest(i);
+      }else{
+        div.classList.add('empty');
+        div.innerHTML='<div class="gplot-emoji">➕</div><div class="gplot-name">空鱼塘</div><div class="gplot-time">点击右侧鱼苗种下</div>';
+        div.onclick=()=>toast('点右侧的鱼苗即可种下','blue');
+      }
+      plotsEl.appendChild(div);
+    }
+  }
+  let seedsEl=document.getElementById('gardenSeeds');
+  if(seedsEl){
+    seedsEl.innerHTML='';
+    let list=seedlingList();
+    if(!list.length){
+      seedsEl.innerHTML='<div class="garden-empty">还没有鱼苗～<br>去冒险 / 闯关模式钓鱼，<br>每条鱼都会变成鱼苗！</div>';
+    }else{
+      list.forEach(item=>{
+        let need=Math.ceil((GARDEN_PLOTS-G.gardenPlots.length)>0?1:0);
+        let d=document.createElement('div');d.className='gseed';
+        d.innerHTML='<span class="gseed-emoji">'+fishImgHtml(item.fish,'gseed-fish-img')+'</span><span class="gseed-name">'+item.fish.n+'</span><span class="gseed-count">×'+item.count+'</span>';
+        d.title='成熟约需 '+growMinForFish(item.fish)+' 游戏分钟';
+        d.onclick=()=>{gardenPlant(item.fish.id);gtutComplete('plant');};
+        seedsEl.appendChild(d);
+      });
+    }
+  }
+}
+// 每帧刷新（进度条 / 时钟 / 金币），结构变化时重建
+function updateGardenUI(){
+  let ov=document.getElementById('gardenOverlay');
+  if(!ov||!ov.classList.contains('active'))return;
+  let gc=document.getElementById('gardenClock');if(gc){let hm=clockHM();gc.textContent=getTimeEmoji(getTimeOfDay())+' '+hm.label;}
+  let gcoin=document.getElementById('gardenCoins');if(gcoin)gcoin.textContent=G.coins.toLocaleString()+' 💰';
+  let dirty=false;
+  G.gardenPlots.forEach((plot,i)=>{
+    let p=gardenProgress(plot),ready=p>=1;
+    let fill=document.getElementById('gplotFill'+i);
+    let tm=document.getElementById('gplotTime'+i);
+    if(fill)fill.style.width=(p*100).toFixed(1)+'%';
+    if(tm&&!ready)tm.textContent='⏳ '+gardenRemainText(plot);
+    if(ready!==!!plot._shownReady){plot._shownReady=ready;dirty=true;}
+  });
+  if(dirty)gardenBuild();
+}
 
 // ============ 岛屿渲染 ============
 function renderIsland(){
@@ -3852,6 +4866,13 @@ function renderIsland(){
     skyG.addColorStop(0.5,'#7dd3fc');
     skyG.addColorStop(0.75,'#bae6fd');
     skyG.addColorStop(1,'#e0f2fe');
+  }else if(tod==='afternoon'){
+    // 🌤️ 下午：偏暖的蓝天，金色渐强
+    skyG.addColorStop(0,'#1e7fd6');
+    skyG.addColorStop(0.25,'#38a8e8');
+    skyG.addColorStop(0.5,'#7cc5f0');
+    skyG.addColorStop(0.75,'#c8e6a0');
+    skyG.addColorStop(1,'#fde9a0');
   }else if(tod==='evening'){
     // 🌆 傍晚：橙红金黄
     skyG.addColorStop(0,'#7c2d12');
@@ -3906,6 +4927,7 @@ function renderIsland(){
     let sx,sy;
     if(tod==='morning'){sx=w*0.22,sy=h*0.28;} // 早晨太阳在东边低处
     else if(tod==='noon'){sx=w*0.5,sy=h*0.16;} // 正午太阳在头顶
+    else if(tod==='afternoon'){sx=w*0.62,sy=h*0.2;} // 下午太阳偏西
     else{sx=w*0.72,sy=h*0.25;} // 傍晚太阳在西边低处
     let sr=Math.min(w,h)*0.1;
     let sunG=cx.createRadialGradient(sx,sy,sr*0.2,sx,sy,sr*2.2);
@@ -3919,6 +4941,11 @@ function renderIsland(){
       sunG.addColorStop(0.25,'rgba(255,255,230,0.7)');
       sunG.addColorStop(0.6,'rgba(200,230,255,0.15)');
       sunG.addColorStop(1,'rgba(150,200,255,0)');
+    }else if(tod==='afternoon'){
+      sunG.addColorStop(0,'rgba(255,250,220,0.95)');
+      sunG.addColorStop(0.3,'rgba(255,220,150,0.7)');
+      sunG.addColorStop(0.6,'rgba(255,170,90,0.2)');
+      sunG.addColorStop(1,'rgba(220,120,40,0)');
     }else{
       sunG.addColorStop(0,'rgba(255,220,150,0.95)');
       sunG.addColorStop(0.3,'rgba(255,180,100,0.7)');
@@ -3927,7 +4954,7 @@ function renderIsland(){
     }
     cx.fillStyle=sunG;
     cx.beginPath();cx.arc(sx,sy,sr*2.2,0,Math.PI*2);cx.fill();
-    let sunCore= tod==='noon'?'rgba(255,255,250,0.9)':tod==='morning'?'rgba(255,245,200,0.85)':'rgba(255,230,170,0.85)';
+    let sunCore= tod==='noon'?'rgba(255,255,250,0.9)':tod==='morning'?'rgba(255,245,200,0.85)':tod==='afternoon'?'rgba(255,248,210,0.85)':'rgba(255,230,170,0.85)';
     cx.fillStyle=sunCore;
     cx.beginPath();cx.arc(sx,sy,sr,0,Math.PI*2);cx.fill();
   }
@@ -4280,7 +5307,7 @@ function renderIsland(){
   cx.font=`bold ${Math.min(w*0.055,28)}px "Microsoft YaHei","PingFang SC",sans-serif`;
   cx.textAlign='center';
   cx.shadowColor='rgba(0,0,0,0.6)';cx.shadowBlur=8;
-  let titleText=tod==='night'?'🌙 夜色小岛':tod==='morning'?'🌅 晨曦小岛':tod==='evening'?'🌆 黄昏小岛':'🏝️ 钓鱼小岛';
+  let titleText=tod==='night'?'🌙 夜色小岛':tod==='morning'?'🌅 晨曦小岛':tod==='afternoon'?'🌤️ 午后小岛':tod==='evening'?'🌆 黄昏小岛':'🏝️ 钓鱼小岛';
   cx.fillText(titleText,w*0.5,h*0.07);
   cx.shadowBlur=0;
   
@@ -4326,7 +5353,7 @@ function returnHome(){
   let idd=document.getElementById('islandDay');if(idd)idd.textContent=adv.day;
   let itd=document.getElementById('islandTimeOfDay');if(itd)itd.textContent=getTimeEmoji(adv.timeOfDay)+' '+getTimeName(adv.timeOfDay);
   let icn=document.getElementById('islandCoins');if(icn)icn.textContent=G.coins.toLocaleString();
-  let icl=document.getElementById('islandClock');if(icl)icl.textContent={morning:'06:00',noon:'12:00',evening:'18:00',night:'22:00'}[adv.timeOfDay]||'12:00';
+  let icl=document.getElementById('islandClock');if(icl)icl.textContent={morning:'06:00',noon:'12:00',afternoon:'15:00',evening:'18:00',night:'22:00'}[adv.timeOfDay]||'12:00';
   adv.islandTab='';
   refreshIslandUI();
   updateIslandTabUI();
@@ -4485,6 +5512,7 @@ function plantVeg(type){
   updateUI();
   refreshIslandUI();
   toast('🌱 '+type+'已种植！'+p.days+'天后可收获！','gold');
+  gtutComplete('plant_veg');
   sfx_reveal_R();
 }
 
@@ -4503,6 +5531,7 @@ function plantFishPlant(type){
   updateUI();
   refreshIslandUI();
   toast('🐠 鱼苗已种植！'+p.days+'天后可收获！','gold');
+  gtutComplete('plant');
   sfx_reveal_SR();
 }
 
@@ -4544,30 +5573,138 @@ function togglePause(){
 
 // ============ 新手教程 ============
 let tutorialSteps=[
-  {icon:'🎣',title:'欢迎来到钓鱼世界！',desc:'在冒险模式中，你需要乘坐小船出海，在100天内赚到100万金币！'},
-  {icon:'💧',title:'点击水面闪光点钓鱼',desc:'水面上会出现闪光钓点，点击即可抛竿。☁️云朵、⛰️高山、☀️太阳区域的钓点更容易出好鱼！'},
-  {icon:'🐸',title:'⭐核心：看青蛙反应预判鱼价！',hint:'🖱️ 现在试试：把鼠标移到水面发光的<b>钓点</b>上，看青蛙的反应！',desc:'钓鱼前，先把<b>鼠标移到钓点</b>上，青蛙会立刻"估价"告诉你这条鱼贵不贵：<br>'+
+  {icon:'👋',title:'欢迎来到《超级钓鱼物语》！',desc:'你要用 <b>100 天</b> 赚到 <b>100 万金币</b>！<br>下面每一步都需要你<b>亲手操作</b>来完成，跟着提示做就好～',action:'start'},
+  {icon:'🖤',title:'水里有模糊的黑色鱼影',desc:'水面漂着缓慢游动的模糊黑鱼影，<b>点击鱼影即可抛竿</b>。鱼影大小只是倾向，不是答案，而且会一直游走，犹豫就没了。',action:'cast',hint:'🖱️ 现在点击水里的任意一个黑色鱼影，抛一竿试试！'},
+  {icon:'🐸',title:'⭐核心：看青蛙反应预判鱼价！',desc:'把鼠标移到鱼影上，青蛙会"估价"告诉你这条鱼贵不贵：<br>'+
     '<span class="tt-chip" style="background:#78909C">❓ 疑问=普通货</span>'+
     '<span class="tt-chip" style="background:#66BB6A">😋 开心=不错</span>'+
     '<span class="tt-chip" style="background:#AB47BC">🤩 震惊=超贵！</span><br>'+
-    '鱼越贵，青蛙的<b>肚子鼓得越大、眼睛瞪得越圆</b>！遇到 🤢 嫌弃表情的钓点千万别碰，那是假货！'},
-  {icon:'🌈',title:'落水水花预告稀有度',desc:'抛竿后，<b>落水水花的颜色</b>就是鱼等级的最终预告：<br>'+
+    '鱼越贵，青蛙的<b>肚子鼓得越大、眼睛瞪得越圆</b>！遇到 🤢 嫌弃表情的钓点千万别碰，那是假货！',action:'hover_spot',hint:'🖱️ 把鼠标移到水里游动的黑色鱼影上，看青蛙的估价反应！'},
+  {icon:'🌈',title:'落水水花预告稀有度',desc:'抛竿后<b>落水水花的颜色</b>就是鱼等级的最终预告：<br>'+
     '<span class="tt-chip" style="background:#4FC3F7">◆ 普通 ★★</span>'+
     '<span class="tt-chip" style="background:#AB47BC">◆ 稀有 ★★★</span>'+
     '<span class="tt-chip" style="background:#FFD700">◆ 珍贵 ★★★★</span>'+
     '<span class="tt-chip" style="background:#FF8F00">◆ 史诗 ★★★★★</span>'+
     '<span class="tt-chip" style="background:#EC407A">◆ 传说 ★★★★★★</span><br>'+
-    '水花越亮、浮漂抖得越猛，鱼就越高级！'},
+    '水花越亮、浮漂抖得越猛，鱼就越高级！',action:'cast',hint:'🎣 再抛一竿，仔细观察落水水花的颜色！'},
   {icon:'🔮',title:'青蛙头顶光环=等级',desc:'青蛙头顶的光环代表它的等级：<br>'+
     '<span class="tt-chip" style="background:#4FC3F7">Lv.2 蓝环</span>'+
     '<span class="tt-chip" style="background:#66BB6A">Lv.3 绿环</span>'+
     '<span class="tt-chip" style="background:#AB47BC">Lv.4 紫环</span>'+
     '<span class="tt-chip" style="background:#FFD700">Lv.5 金环</span><br>'+
-    '<b>Lv.1 没有光环</b>。等级越高成功率越高，<b>满级青蛙100%成功</b>，任何鱼都能抓到！'},
-  {icon:'⚠️',title:'注意危险值',desc:'每天钓鱼会累积危险值，危险值越高越容易触发灾难。记得及时收手回家！'},
-  {icon:'🎒',title:'使用道具辅助',desc:'点击道具商店购买道具：闪光弹💣、精准雷达🎯、强化香饵🍀、延时沙漏⏰、<b>呼唤鱼群🐟</b>；冒险模式还有<b>氧气瓶🤿</b>（多潜一次）、<b>避风斗篷☂️</b>（挡下灾难）、<b>寻宝罗盘🧭</b>、<b>糖果鸟哨🕊️</b>，以及让青蛙绝不失误的<b>蛙力饮料🥤</b>！'},
-  {icon:'🏝️',title:'钓到鱼直接赚金币',desc:'钓到的鱼会自动折算金币进入钱包，无需回岛卖鱼！鱼还会放进背包，可以种菜种鱼继续生钱！'},
+    '<b>Lv.1 没有光环</b>。等级越高成功率越高，<b>满级青蛙 100% 成功</b>，任何鱼都能抓到！',action:'upgrade_frog',hint:'⬆️ 点击底部「🐸 升级青蛙」按钮，升一级看看！'},
+  {icon:'⚠️',title:'注意「危险值」',desc:'每天钓鱼会累积危险值，危险值越高越容易触发灾难。钓错假鱼、乱用竿都会涨危险，记得及时收手回家！',action:'cast',hint:'🎣 再抛一竿，留意右上角危险条的变化～'},
+  {icon:'🎒',title:'道具：鼠标放上去就展开使用',desc:'<b>把鼠标放到「🎒 道具」按钮上</b>，会<b>自动展开</b>快捷面板，点「使用」立刻生效，没库存的可以直接「买」。<br>'+
+    '常用道具：闪光弹💣（照亮所有假鱼影）、精准雷达🎯、强化香饵🍀、延时沙漏⏰……点按钮本身还能打开完整商店。',action:'hover_item',hint:'🖱️ 把鼠标移到右下角「🎒 道具」按钮上，展开道具面板看看！'},
+  {icon:'🏝️',title:'钓到鱼直接赚金币！',desc:'钓到的鱼会自动折算金币进入钱包，无需回岛卖鱼！鱼还会放进背包，可以种菜种鱼继续生钱！',action:'catch',hint:'🎣 实际钓上一条鱼，看金币到账！'},
+  {icon:'📖',title:'钓到新鱼 → 图鉴领奖励！',desc:'每钓到一种<b>新鱼</b>，图鉴会自动收录，并生成一笔<b>待领取</b>的收录奖励，越稀有越多。<br>'+
+    '这时 <b>📖 图鉴</b> 按钮会亮起 <b>红点</b> —— 点进去按 <b>「一键领取」</b> 或单独领取。',action:'open_album',hint:'📖 打开「📖 图鉴」按钮，进入图鉴界面！'},
+  {icon:'🚀',title:'准备好了，出发吧！',desc:'跟着青蛙的反应、善用道具，100 天赚满 100 万！',action:'start',hint:'🎣 点"开始冒险"正式开局！'},
 ];
+
+// ============ 种鱼模式专用教学（解锁后引导）============
+let gardenTutorialSteps=[
+  {icon:'🐠',title:'种鱼模式解锁啦！',desc:'你成功钓到 <b>'+GARDEN_UNLOCK_CAUGHT+'</b> 条鱼，神秘的 <b>🐠 种鱼模式</b> 打开啦！<br>'+
+    '一句话概括：<b>把钓到的鱼当种子种进鱼塘，等它成熟，就能收出更多金币。</b>',action:'start'},
+  {icon:'🕳️',title:'① 点鱼塘把鱼苗种下去',desc:'在 <b>🐠 种鱼模式</b> 里点空鱼塘格子，选一颗鱼苗即可种下。<br>'+
+    '鱼塘一共 <b>'+GARDEN_PLOTS+' 格</b>，可以同时种好几种鱼。',action:'plant',hint:'🕳️ 点一个空鱼塘格子，从右侧鱼苗里种下一颗！'},
+  {icon:'⏳',title:'② 越贵的鱼成熟越慢',desc:'种植后鱼塘会显示<b>剩余时间</b>，时间随<b>全局时钟</b>流动（「休息 / 进入下一天」会大幅推进时间）。<br>'+
+    '便宜鱼很快成熟，贵重鱼要等久一点，但收益高得多。',action:'hover_plot',hint:'🖱️ 把鼠标移到鱼塘格子上，看看成熟信息！'},
+  {icon:'🪙',title:'③ 成熟后点击收获金币',desc:'鱼塘成熟后会变亮并出现 <b>✅ 可收获</b> 标记。<br>'+
+    '点一下即可收货，<b>收益 = 鱼价 × 种植时长加成</b>，只进钱包、不影响百万目标进度。',action:'harvest',hint:'🪙 等鱼成熟后，点击鱼塘格子收获一次！'},
+  {icon:'🥕',title:'④ 菜地也能种',desc:'右侧菜地可以种菜，收菜同样卖钱，和鱼池一样是稳定收入来源。<br>'+
+    '先钓点鱼攒金币，再来种菜也行。',action:'plant_veg',hint:'🥕 在右侧菜地种一株菜！'},
+  {icon:'🔁',title:'⑤ 循环起来，钱生钱',desc:'钓到鱼 → 拿鱼苗 → 种进鱼塘 → 成熟收金币 → 用金币升级青蛙 / 买道具 → 钓到更贵的鱼……<br>'+
+    '<b>记得常回来收鱼塘！</b>',action:'start',hint:'🌱 好啦，开始种鱼吧！'},
+];
+
+// ============ 关卡教学（道具课 / 区域课）============
+// 进关自动弹出半穿透卡片：玩家真的做出对应操作，教学才完成并消失
+let LEVEL_TUT={
+  4:{icon:'💣',title:'道具教学 · 闪光弹',
+     desc:'假钓点和真钓点长得一模一样！<br>💣 <b>闪光弹</b>会照亮水面 4 秒，<b>假点当场现形</b>，趁这 4 秒安心下竿。',
+     action:'use:flash',hint:'鼠标移到底部「🎒 道具」上 → 点「使用」用掉 💣 闪光弹'},
+  5:{icon:'☁️',title:'区域教学 · 云朵钓点',
+     desc:'水面漂着 <b>☁️ 云朵钓点</b>，云里的鱼又大又值钱。<br>本关<b>只有从云钓点钓起的鱼</b>才算完成目标。',
+     action:'catch_cloud',hint:'对准 ☁️ 云朵钓点抛竿，钓上 1 条云鱼'},
+  7:{icon:'⛰️',title:'区域教学 · 山岩钓点',
+     desc:'<b>⛰️ 山岩钓点</b>藏在岩缝里，出 R 级珍品的概率更高。<br>本关要从山岩钓点钓到 R 级鱼。',
+     action:'catch_mountain',hint:'对准 ⛰️ 山岩钓点抛竿，钓上 1 条山岩鱼'},
+  11:{icon:'💣',title:'道具课 · 闪光弹',
+     desc:'假点超过一半！<b>💣 闪光弹</b>照亮全场 4 秒，<b>假钓点立刻现形</b>。<br>先排雷，再从容下竿。',
+     action:'use:flash',hint:'鼠标移到底部「🎒 道具」上 → 点「使用」用掉 💣 闪光弹'},
+  12:{icon:'🎯',title:'道具课 · 精准雷达',
+     desc:'<b>🎯 精准雷达</b>能让<b>下一个钓点必定是真货</b>，专治假点横行。<br>先开雷达，再抛竿。',
+     action:'use:accuracy',hint:'鼠标移到底部「🎒 道具」上 → 使用 🎯 精准雷达'},
+  13:{icon:'🍀',title:'道具课 · 强化香饵',
+     desc:'<b>🍀 强化香饵</b>让接下来 <b>3 次出竿稀有度 +1</b>（N→R、R→SR）。<br>想钓 SR，先撒香饵。',
+     action:'use:lucky',hint:'鼠标移到底部「🎒 道具」上 → 使用 🍀 强化香饵'},
+  14:{icon:'🐟',title:'道具课 · 呼唤鱼群',
+     desc:'钓点刷得慢？<b>🐟 呼唤鱼群</b>能<b>立刻刷新全部钓点</b>，换一批新货。',
+     action:'use:refresh',hint:'鼠标移到底部「🎒 道具」上 → 使用 🐟 呼唤鱼群'},
+  15:{icon:'⏰',title:'道具课 · 延时沙漏',
+     desc:'竿数不够用？<b>⏰ 延时沙漏</b>直接<b>加 2 次出竿机会</b>，救急神器。',
+     action:'use:sandglass',hint:'鼠标移到底部「🎒 道具」上 → 使用 ⏰ 延时沙漏（+2 竿）'}
+};
+let levelTutActive=null; // 当前正在进行的关卡教学 levelId
+function maybeLevelTut(idx){
+  let cfg=LEVELS[idx];if(!cfg)return;
+  let t=LEVEL_TUT[cfg.id];
+  if(!t)return;
+  if(G.levelTut&&G.levelTut[cfg.id])return; // 这关的教学已经做过了
+  setTimeout(()=>showLevelTut(cfg.id),800);
+}
+function showLevelTut(lid){
+  let t=LEVEL_TUT[lid];if(!t)return;
+  levelTutActive=lid;
+  let ov=document.getElementById('levelTutOverlay');if(!ov)return;
+  let ic=document.getElementById('ltIcon');if(ic)ic.textContent=t.icon;
+  let ti=document.getElementById('ltTitle');if(ti)ti.textContent=t.title;
+  let de=document.getElementById('ltDesc');if(de)de.innerHTML=t.desc;
+  let hi=document.getElementById('ltHint');if(hi){hi.style.display='block';hi.innerHTML='🎯 操作任务：'+t.hint;}
+  ov.classList.add('active');
+  let bs=document.getElementById('btnShop');if(bs)bs.classList.add('lt-highlight'); // 高亮道具入口
+}
+function closeLevelTut(save){
+  let ov=document.getElementById('levelTutOverlay');if(ov)ov.classList.remove('active');
+  let bs=document.getElementById('btnShop');if(bs)bs.classList.remove('lt-highlight');
+  if(save&&levelTutActive!=null){
+    if(!G.levelTut)G.levelTut={};
+    G.levelTut[levelTutActive]=true;
+    saveGame(true);
+  }
+  levelTutActive=null;
+}
+// 玩家做出对应操作 → 教学完成，卡片立即消失
+function levelTutComplete(action){
+  if(levelTutActive==null)return;
+  let t=LEVEL_TUT[levelTutActive];
+  if(!t||t.action!==action)return;
+  let icon=t.icon;
+  closeLevelTut(true);
+  toast(icon+' 学会了！这就是本关的诀窍','gold');
+  if(typeof sfx_reveal_SR==='function')sfx_reveal_SR();
+}
+
+window.closeLevelTut=closeLevelTut;
+
+// ============ 操作门控教学框架 ============
+// 玩家完成某步要求的操作时调用 → 立即进入下一步
+function tutComplete(action){
+  if(G.tutorial>=tutorialSteps.length)return;
+  let s=tutorialSteps[G.tutorial];
+  if(!s||s.action!==action)return;
+  G._tutDone=true;
+  nextTutorial();
+}
+function gtutComplete(action){
+  let i=G.gardenTutStep||0;
+  if(i>=gardenTutorialSteps.length)return;
+  let s=gardenTutorialSteps[i];
+  if(!s||s.action!==action)return;
+  G._gtutDone=true;
+  nextGardenTut();
+}
 
 function showTutorial(){
   if(G.tutorial>=tutorialSteps.length)return;
@@ -4587,7 +5724,7 @@ function renderTutorialStep(){
   let demoMode=!!s.hint;
   tc.classList.toggle('tutorial-hover-demo',demoMode);
   let hintEl=document.getElementById('tutorialHint');
-  if(hintEl){if(s.hint){hintEl.style.display='block';hintEl.innerHTML=s.hint;}else hintEl.style.display='none';}
+  if(hintEl){if(s.hint){hintEl.style.display='block';hintEl.innerHTML='🎯 操作任务：'+s.hint;}else hintEl.style.display='none';}
   if(G.tutorial!==2)G._tutHinted=false;
   // 步骤指示器
   let ind=document.getElementById('tutorialStepIndicator');
@@ -4597,13 +5734,23 @@ function renderTutorialStep(){
     dot.className='tutorial-dot'+(i===G.tutorial?' active':'');
     ind.appendChild(dot);
   }
-  // 按钮文字
+  // 操作门控：未完成任务前禁用"继续"按钮，完成后才可进入下一步
   let nb=document.getElementById('tutorialNextBtn');
-  if(G.tutorial>=tutorialSteps.length-1)nb.textContent='开始冒险！🎣';
-  else nb.textContent='下一步 ➡️';
+  let last=G.tutorial>=tutorialSteps.length-1;
+  if(s.action==='start'){
+    nb.disabled=false; nb.style.opacity=1;
+    nb.textContent=last?'开始冒险！🎣':'继续 ➡️';
+  }else if(!G._tutDone){
+    nb.disabled=true; nb.style.opacity=0.4;
+    nb.textContent='⏳ 请先完成上面的操作…';
+  }else{
+    nb.disabled=false; nb.style.opacity=1;
+    nb.textContent=last?'开始冒险！🎣':'继续 ➡️';
+  }
 }
 
 function nextTutorial(){
+  G._tutDone=false;
   G.tutorial++;
   if(G.tutorial>=tutorialSteps.length){
     document.getElementById('tutorialOverlay').classList.remove('active');
@@ -4618,11 +5765,11 @@ function skipTutorial(){
   G.tutorial=tutorialSteps.length;
 }
 
-function startAdventure(){adv.active=true;adv.day=G.gameDay+1;adv.timeOfDay=getTimeOfDay(adv.day);adv.dayCasts=0;adv.dayEarned=0;adv.totalEarned=G.totalEarned;adv.danger=0;adv.dayEnded=false;adv.penaltyToday=0;adv.gameOver=false;adv.gameWin=false;adv._warnedWarn=false;adv._warnedDanger=false;adv._triggeredDoom=false;adv.fishBag=[];adv.plantedVeg=[];adv.plantedFish=[];adv.islandTab='plant';candyBird.active=false;hiddenTreasures=[];treasureSpawnTimer=0;treasureCollectAnim=[];tongueState.active=false;tongueState.phase='idle';if(G.coins<300)G.coins=300;G.totalPulls=0;G.pitySR=0;G.pitySSR=0;levelCaught=0;levelCasts=0;levelMaxCasts=ADV_CASTS_PER_DAY;levelComplete_d=false;spots=[];levelSpotTimer=0;G.phase='idle';document.getElementById('modePick').classList.add('hidden');document.getElementById('menuBackBtn').classList.add('show');document.getElementById('gameUI').classList.remove('hidden');document.getElementById('fishingHud').classList.add('active');document.getElementById('bottomBar').classList.remove('hidden');document.getElementById('levelIndicator').style.display='none';let bt=document.getElementById('btnTen');if(bt)bt.style.display='none';document.getElementById('pityDisplay').style.display='none';document.getElementById('hudBuffs').style.display='none';let bs=document.getElementById('btnSell');if(bs)bs.style.display='inline-block';let bg=document.getElementById('btnSingle');if(bg)bg.textContent='🎣 垂钓 · '+COST_SINGLE+'💰';let bk=document.getElementById('btnDive');if(bk){bk.style.display='inline-block';updateDiveBtn();}let fu=document.getElementById('btnFrogUpgrade');if(fu)fu.style.display='inline-block';document.getElementById('gameTitle').style.display='none';document.getElementById('gtbModeTitle').textContent='🎣 冒险模式';fishes=[];initGame();updateAdvHUD();updateUI();updateButtons();if(G.tutorial<tutorialSteps.length)showTutorial();toast('🌊 冒险开始！100天内赚到100万💰！升级青蛙、潜水寻宝来生存！','gold');sfx_reveal_UR();}
+function startAdventure(){adv.active=true;adv.day=G.gameDay+1;G.clockMin=0;adv.timeOfDay=getTimeOfDay();updateClockHUD();adv.dayCasts=0;adv.dayEarned=0;adv.totalEarned=G.totalEarned;adv.danger=0;adv.dayEnded=false;adv.penaltyToday=0;adv.gameOver=false;adv.gameWin=false;adv._warnedWarn=false;adv._warnedDanger=false;adv._triggeredDoom=false;adv.fishBag=[];adv.plantedVeg=[];adv.plantedFish=[];adv.islandTab='plant';candyBird.active=false;hiddenTreasures=[];treasureSpawnTimer=0;treasureCollectAnim=[];tongueState.active=false;tongueState.phase='idle';if(G.coins<300)G.coins=300;G.totalPulls=0;G.pitySR=0;G.pitySSR=0;levelCaught=0;levelCasts=0;levelMaxCasts=ADV_CASTS_PER_DAY;levelComplete_d=false;spots=[];levelSpotTimer=0;G.phase='idle';document.getElementById('modePick').classList.add('hidden');document.getElementById('menuBackBtn').classList.add('show');document.getElementById('gameUI').classList.remove('hidden');document.getElementById('fishingHud').classList.add('active');document.getElementById('bottomBar').classList.remove('hidden');document.getElementById('levelIndicator').style.display='none';let bt=document.getElementById('btnTen');if(bt)bt.style.display='none';document.getElementById('pityDisplay').style.display='none';document.getElementById('hudBuffs').style.display='none';let bs=document.getElementById('btnSell');if(bs)bs.style.display='inline-block';let bg=document.getElementById('btnSingle');if(bg)bg.textContent='🎣 垂钓 · '+COST_SINGLE+'💰';let bk=document.getElementById('btnDive');if(bk){bk.style.display='inline-block';updateDiveBtn();}let fu=document.getElementById('btnFrogUpgrade');if(fu)fu.style.display='inline-block';document.getElementById('gameTitle').style.display='none';document.getElementById('gtbModeTitle').textContent='🎣 冒险模式';fishes=[];initGame();updateAdvHUD();updateUI();updateButtons();if(G.tutorial<tutorialSteps.length)showTutorial();toast('🌊 冒险开始！100天内赚到100万💰！升级青蛙、潜水寻宝来生存！','gold');sfx_reveal_UR();}
 function showAdventureResult(win){document.getElementById('advResultOverlay').classList.add('active');let t=document.getElementById('advResultTitle');let d=document.getElementById('advResultDetail');if(win){t.textContent='🎉 冒险成功！';t.style.color='#FFD700';d.textContent='全局总收入 '+G.totalEarned.toLocaleString()+'💰 青蛙: '+FROG_CFG[frogLv-1].name+' Lv.'+frogLv;sfx_reveal_UR();}else{t.textContent='💔 冒险失败…';t.style.color='#EF5350';d.textContent='只赚了 '+G.totalEarned.toLocaleString()+' 💰 距目标还差 '+Math.ceil((GOAL_TARGET-G.totalEarned)/10000)+'万';sfx_reveal_N();}}
 function advRestart(){document.getElementById('advResultOverlay').classList.remove('active');adv.active=false;startAdventure();}
 function getAdvMultiplier(){if(!adv.active||adv.day<1)return 1;if(adv.day<=3)return 1;if(adv.day<=7)return 1.2;if(adv.day<=12)return 1.5;if(adv.day<=17)return 1.8;if(adv.day<=30)return 2.2;if(adv.day<=50)return 2.5;if(adv.day<=80)return 3.0;return 3.5;}
-function exitToMenu(){if(adv.active){advQuit();return;}gameMode='';document.getElementById('modePick').classList.remove('hidden');document.getElementById('gameUI').classList.add('hidden');document.getElementById('bottomBar').classList.add('hidden');document.getElementById('levelIndicator').style.display='none';document.getElementById('pityDisplay').style.display='none';document.getElementById('hudBuffs').style.display='none';document.getElementById('gameTitle').style.display='';document.getElementById('gameTitle').textContent='🎣 Next Bigger Catch';document.getElementById('btnDive').style.display='none';let fu3=document.getElementById('btnFrogUpgrade');if(fu3)fu3.style.display='none';document.getElementById('itemShopOverlay').classList.remove('active');G.islandMode=false;document.getElementById('islandOverlay').classList.remove('active');document.getElementById('tutorialOverlay').classList.remove('active');document.getElementById('pauseOverlay').classList.remove('active');G.paused=false;spots=[];fishes=[];G.phase='idle';adv.active=false;adv.fishBag=[];adv.plantedVeg=[];adv.plantedFish=[];candyBird.active=false;hiddenTreasures=[];treasureSpawnTimer=0;treasureCollectAnim=[];tongueState.active=false;tongueState.phase='idle';saveGame();}
+function exitToMenu(){if(adv.active){advQuit();return;}gameMode='';document.getElementById('modePick').classList.remove('hidden');document.getElementById('gameUI').classList.add('hidden');document.getElementById('bottomBar').classList.add('hidden');document.getElementById('levelIndicator').style.display='none';document.getElementById('pityDisplay').style.display='none';document.getElementById('hudBuffs').style.display='none';document.getElementById('gameTitle').style.display='';document.getElementById('gameTitle').textContent='🎣 Next Bigger Catch';document.getElementById('btnDive').style.display='none';let fu3=document.getElementById('btnFrogUpgrade');if(fu3)fu3.style.display='none';document.getElementById('itemShopOverlay').classList.remove('active');G.islandMode=false;document.getElementById('islandOverlay').classList.remove('active');G.gardenMode=false;document.getElementById('gardenOverlay').classList.remove('active');document.getElementById('tutorialOverlay').classList.remove('active');document.getElementById('pauseOverlay').classList.remove('active');G.paused=false;spots=[];fishes=[];G.phase='idle';adv.active=false;adv.fishBag=[];adv.plantedVeg=[];adv.plantedFish=[];candyBird.active=false;hiddenTreasures=[];treasureSpawnTimer=0;treasureCollectAnim=[];tongueState.active=false;tongueState.phase='idle';updateGardenCardUI();saveGame();}
 function advQuit(){document.getElementById('advResultOverlay').classList.remove('active');document.getElementById('fishingHud').classList.remove('active');document.getElementById('pityDisplay').style.display='none';document.getElementById('hudBuffs').style.display='none';document.getElementById('levelIndicator').style.display='none';document.getElementById('bottomBar').classList.add('hidden');document.getElementById('gameTitle').style.display='';document.getElementById('gameTitle').textContent='🎣 Next Bigger Catch';G.islandMode=false;document.getElementById('islandOverlay').classList.remove('active');document.getElementById('pauseOverlay').classList.remove('active');G.paused=false;adv.active=false;adv.fishBag=[];adv.plantedVeg=[];adv.plantedFish=[];disasterFX.active=false;disasterFX.paused=false;sfx_disaster_ambient_stop();sfx_rain_stop();candyBird.active=false;hiddenTreasures=[];treasureSpawnTimer=0;treasureCollectAnim=[];tongueState.active=false;tongueState.phase='idle';diveState.sessionsLeft=0;document.getElementById('btnDive').style.display='none';document.getElementById('diveOverlay').classList.remove('active');closeDive();document.getElementById('modePick').classList.remove('hidden');document.getElementById('gameUI').classList.add('hidden');document.getElementById('bottomBar').classList.add('hidden');let fuq=document.getElementById('btnFrogUpgrade');if(fuq)fuq.style.display='none';saveGame();}
 function updateAdvHUD(){let m=getAdvMultiplier();let el=document.getElementById('fhDay');if(el){let todEmoji=getTimeEmoji(adv.timeOfDay||'noon');el.textContent=todEmoji+' 第 '+adv.day+'/'+ADV_DAYS+' 天';}let ct=document.getElementById('fhDayCasts');if(ct)ct.textContent=adv.dayCasts;let te=document.getElementById('fhTodayEarned');if(te)te.textContent=adv.dayEarned.toLocaleString();let pc=document.getElementById('fhDangerPct');if(pc)pc.textContent=Math.floor(adv.danger)+'%';let dm=document.getElementById('fhMultiplier');if(dm){dm.textContent=m+'x';dm.style.color=m>=1.5?'#FFD700':m>=1.2?'#FFC107':'rgba(255,255,255,0.7)';}let bc=document.getElementById('fhBagCount');if(bc)bc.textContent=(adv.fishBag?adv.fishBag.length:0);}
 // ============ 闯关模式：选关页 ============
@@ -4635,6 +5782,7 @@ function openLevelSelect(){
 function closeLevelSelect(){
   let ov=document.getElementById('levelSelectOverlay');if(ov)ov.classList.remove('active');
   let mp=document.getElementById('modePick');if(mp)mp.classList.remove('hidden');
+  if(typeof updateGardenCardUI==='function')updateGardenCardUI();
 }
 function renderLevelGrid(){
   let grid=document.getElementById('lsGrid');if(!grid)return;
@@ -4690,10 +5838,10 @@ function enterLevelMode(idx){
 function selectMode(m){
   if(m==='level'){openLevelSelect();}
   else if(m==='adventure'){gameMode='adventure';fishes=[];spots=[];temptations=[];trashItems=[];startAdventure();}
-}function saveGame(){let d={frogLv:frogLv,frogXp:frogXp,islandUnlocked:G.islandUnlocked,rainbowUnlocked:rainbowUnlocked||frogRainbow};try{localStorage.setItem('nbc_save',JSON.stringify(d));toast('💾 已存档','gray');}catch(e){}}
-function loadGame(){try{let r=localStorage.getItem('nbc_save');if(!r)return false;let d=JSON.parse(r);frogLv=d.frogLv||1;frogXp=d.frogXp||0;frogXpNext=FROG_CFG[frogLv-1].xp;if(d.islandUnlocked)G.islandUnlocked=true;if(d.rainbowUnlocked){rainbowUnlocked=true;frogRainbow=true;}return true;}catch(e){return false;}}
-function initGame(){resize();setupInput();G.paused=false;G.islandMode=false;document.getElementById('pauseBtn').textContent='⏸️';document.getElementById('pauseOverlay').classList.remove('active');document.getElementById('islandOverlay').classList.remove('active');document.getElementById('tutorialOverlay').classList.remove('active');disasterFX.active=false;disasterFX.paused=false;stormWarn={active:false,timer:0,lightning:0,rainDrops:[],darkAlpha:0,windOff:0};candyBird.active=false;hiddenTreasures=[];treasureSpawnTimer=0;treasureCollectAnim=[];tongueState.active=false;tongueState.phase='idle';for(let i=0;i<8;i++){let f=FISH_POOL[Math.floor(Math.random()*FISH_POOL.length)];let dir=Math.random()>0.5?1:-1;fishes.push({fish:f,dir:dir,speed:(40+Math.random()*80)*dir,size:f.w[0]+Math.random()*(f.w[1]-f.w[0])*0.5,color:f.c,emoji:f.e,y:H*WL+H*0.04+Math.random()*H*0.3,x:Math.random()*W,alive:true,wobble:Math.random()*Math.PI*2,depth:0.3+Math.random()*0.7,alpha:0.3+Math.random()*0.4});}G.phase='idle';}
-function init(){resize();loadGame();document.getElementById('modePick').classList.remove('hidden');document.getElementById('gameUI').classList.add('hidden');document.getElementById('fishingHud').classList.remove('active');document.getElementById('bottomBar').classList.add('hidden');document.getElementById('levelIndicator').style.display='none';document.getElementById('pityDisplay').style.display='none';document.getElementById('gameTitle').textContent='🎣 Next Bigger Catch';updateFrogUI();setupGoalHudDrag();updateGoalHUD();document.addEventListener('click',function(){initAudio();},{once:true});
+}function saveGame(silent){let d={frogLv:frogLv,frogXp:frogXp,islandUnlocked:G.islandUnlocked,rainbowUnlocked:rainbowUnlocked||frogRainbow,totalCaught:G.totalCaught,seedlings:G.seedlings,gardenUnlocked:G.gardenUnlocked,gardenPlots:G.gardenPlots,gardenTutSeen:G.gardenTutSeen,gardenTutPending:G.gardenTutPending,worldTime:G.worldTime,album:G.album,albumNew:G.albumNew,albumPending:G.albumPending,dailyDate:G.dailyDate,dailyTasks:G.dailyTasks,dailyClaimed:G.dailyClaimed,signInDate:G.signInDate,signInDay:G.signInDay,levelTut:G.levelTut||{}};try{localStorage.setItem('nbc_save',JSON.stringify(d));if(!silent)toast('💾 已存档','gray');}catch(e){}}
+function loadGame(){try{let r=localStorage.getItem('nbc_save');if(!r)return false;let d=JSON.parse(r);frogLv=d.frogLv||1;frogXp=d.frogXp||0;frogXpNext=FROG_CFG[frogLv-1].xp;if(d.islandUnlocked)G.islandUnlocked=true;if(d.rainbowUnlocked){rainbowUnlocked=true;frogRainbow=true;}G.totalCaught=d.totalCaught||0;G.seedlings=d.seedlings||{};G.gardenUnlocked=!!d.gardenUnlocked;G.gardenPlots=d.gardenPlots||[];G.gardenTutSeen=!!d.gardenTutSeen;G.gardenTutPending=!!d.gardenTutPending;G.worldTime=d.worldTime||0;G.clockMin=0;G.album=d.album||{};G.albumNew=d.albumNew||{};G.albumPending=d.albumPending||{};G.dailyDate=d.dailyDate||'';G.dailyTasks=d.dailyTasks||{};G.dailyClaimed=d.dailyClaimed||{};G.signInDate=d.signInDate||'';G.signInDay=d.signInDay||0;G.levelTut=d.levelTut||{};return true;}catch(e){return false;}}
+function initGame(){resize();setupInput();G.paused=false;G.islandMode=false;document.getElementById('pauseBtn').textContent='⏸️';document.getElementById('pauseOverlay').classList.remove('active');document.getElementById('islandOverlay').classList.remove('active');document.getElementById('tutorialOverlay').classList.remove('active');disasterFX.active=false;disasterFX.paused=false;stormWarn={active:false,timer:0,lightning:0,rainDrops:[],darkAlpha:0,windOff:0};candyBird.active=false;hiddenTreasures=[];treasureSpawnTimer=0;treasureCollectAnim=[];tongueState.active=false;tongueState.phase='idle';for(let i=0;i<8;i++){let f=FISH_POOL[Math.floor(Math.random()*FISH_POOL.length)];let dir=Math.random()>0.5?1:-1;fishes.push({fish:f,dir:dir,speed:(28+Math.random()*152)*dir,size:f.w[0]+Math.random()*(f.w[1]-f.w[0])*0.5,color:f.c,emoji:f.e,y:H*WL+H*0.04+Math.random()*H*0.3,x:Math.random()*W,alive:true,wobble:Math.random()*Math.PI*2,depth:0.3+Math.random()*0.7,alpha:0.3+Math.random()*0.4});}G.phase='idle';}
+function init(){resize();loadGame();loadTimeScale();document.getElementById('modePick').classList.remove('hidden');document.getElementById('gameUI').classList.add('hidden');document.getElementById('fishingHud').classList.remove('active');document.getElementById('bottomBar').classList.add('hidden');document.getElementById('levelIndicator').style.display='none';document.getElementById('pityDisplay').style.display='none';document.getElementById('gameTitle').textContent='🎣 Next Bigger Catch';updateFrogUI();setupGoalHudDrag();if(typeof setupItemHover==='function')setupItemHover();updateGoalHUD();updateGardenCardUI();updateClockHUD();if(typeof ensureDaily==='function')ensureDaily();if(typeof updateRedDots==='function')updateRedDots();setInterval(function(){if(typeof updateRedDots==='function')updateRedDots();},5000);document.addEventListener('click',function(){initAudio();},{once:true});
   // ESC暂停/关闭岛屿；开场剧情：空格/回车继续、ESC跳过
   document.addEventListener('keydown',function(ev){
     if(introStory.active){
@@ -4701,6 +5849,7 @@ function init(){resize();loadGame();document.getElementById('modePick').classLis
       else if(ev.key==='Escape'){ev.preventDefault();skipIntroStory();}
       return;
     }
+    if(ev.key==='Escape'&&G.gardenMode){ev.preventDefault();closeGardenMode();return;}
     if(ev.key==='Escape'&&(gameMode||adv.active)){ev.preventDefault();if(G.islandMode){closeIsland();}else{togglePause();}}
   });
   requestAnimationFrame(loop);
@@ -4719,6 +5868,7 @@ window.upgradeFrog=upgradeFrog;window.exitToMenu=exitToMenu;
 window.togglePause=togglePause;window.returnHome=returnHome;
 window.switchIslandTab=switchIslandTab;
 window.closeIsland=closeIsland;window.restAndNextDay=restAndNextDay;
+window.openGardenMode=openGardenMode;window.closeGardenMode=closeGardenMode;
 window.nextTutorial=nextTutorial;window.skipTutorial=skipTutorial;
 window.plantVeg=plantVeg;window.plantFishPlant=plantFishPlant;
 
@@ -5380,6 +6530,25 @@ function devUnlockAllLevels(){
   G.levelCleared=Math.max(G.levelCleared,LEVELS.length-1);
   toast('🔓 已解锁全部关卡（1 ~ '+LEVELS.length+'）！','gold');
 }
+// 作弊：一键解锁全部图鉴（奖励挂为待领取，方便验收红点与领取流程）
+function devUnlockAllAlbum(){
+  let got=0,coins=0;
+  if(!G.albumPending)G.albumPending={};
+  FISH_POOL.forEach(f=>{
+    if(!G.album[f.id]){
+      G.album[f.id]=1;got++;
+      let rw=(f.easter?ALBUM_REWARD.easter:ALBUM_REWARD[f.r])||0;
+      coins+=rw;
+      if(rw>0)G.albumPending[f.id]=(G.albumPending[f.id]||0)+rw;
+    }
+    if(!G.albumNew[f.id])G.albumNew[f.id]=true;
+  });
+  toast('📖 已解锁全部图鉴 '+got+' 种，'+coins+'💰奖励待领取（点图鉴一键领取）','gold');
+  updateUI();updateRedDots();
+  let ov=document.getElementById('albumOverlay');
+  if(ov&&ov.classList.contains('active'))renderAlbum();
+  saveGame(true);
+}
 function devResetProgress(){
   if(!confirm('⚠️ 确定要重置所有进度吗？\n\n青蛙等级、彩虹蛙、岛屿解锁、金币、道具、图鉴、关卡与 100 天挑战进度将全部清空，且无法恢复！'))return;
   // 1) 清空存档与本地记录
@@ -5392,8 +6561,10 @@ function devResetProgress(){
   if(typeof updateFrogUI==='function')updateFrogUI();
   // 4) 挑战进度
   G.coins=START_COINS;G.totalEarned=0;G.gameDay=0;G.levelCleared=0;G.gameEnded=false;
-  G.pitySR=0;G.pitySSR=0;G.totalPulls=0;G.album={};G.catches=[];
+  G.pitySR=0;G.pitySSR=0;G.totalPulls=0;G.album={};G.albumNew={};G.albumFilter='all';G.catches=[];
+  G.dailyDate='';G.dailyTasks={};G.dailyClaimed={};G.signInDate='';G.signInDay=0;G.redDots={};
   G.islandUnlocked=false;G.tutorial=0;G.phase='idle';
+  G.totalCaught=0;G.seedlings={};G.gardenPlots=[];G.gardenUnlocked=false;G.gardenMode=false;G.gardenTutSeen=false;G.gardenTutPending=false;G.gardenTutStep=0;G.clockMin=0;G.worldTime=0;
   G.items={flash:3,accuracy:1,lucky:1,sandglass:1,oxygen:1,frogdrink:1};
   G.buffs={accuracyNext:false,luckyBait:0,rareBoost:0,nextUR:false,frogPower:0};
   // 5) 关卡 / 冒险 / 潜水状态
@@ -5403,11 +6574,12 @@ function devResetProgress(){
   adv.day=1;adv.dayEarned=0;adv.dayCasts=0;adv.danger=0;adv.gameOver=false;adv.gameWin=false;adv.totalEarned=0;
   adv.fishBag=[];adv.plantedVeg=[];adv.plantedFish=[];
   // 6) 关闭残留弹窗
-  ['goalOverlay','levelCompleteOverlay','endingResultOverlay','advResultOverlay','endingOverlay','battleOverlay'].forEach(function(id){
+  ['goalOverlay','levelCompleteOverlay','endingResultOverlay','advResultOverlay','endingOverlay','battleOverlay','gardenOverlay'].forEach(function(id){
     let el=document.getElementById(id);if(el)el.classList.remove('active');
   });
   // 7) 刷新界面
   updateGoalHUD();updateUI();
+  if(typeof updateGardenCardUI==='function')updateGardenCardUI();
   if(typeof updateAdvHUD==='function')updateAdvHUD();
   if(typeof updateDiveBtn==='function')updateDiveBtn();
   toast('🗑️ 所有进度已重置！','red');
@@ -5447,6 +6619,24 @@ function devReplayTutorial(){
   let mp=document.getElementById('modePick');if(mp)mp.classList.remove('hidden');
   G.tutorial=0;
   showTutorial();
+}
+// 作弊：解锁种鱼模式并立刻进入（首次进入会自动弹教学）
+function devUnlockGarden(){
+  document.getElementById('devOverlay').classList.remove('active');
+  G.gardenUnlocked=true;G.gardenTutSeen=false;G.gardenTutPending=true;
+  if(!G.seedlings)G.seedlings={};
+  // 送几种鱼苗方便试玩
+  [FISH_POOL[0],FISH_POOL[5],FISH_POOL[9]].forEach(f=>{if(f)G.seedlings[f.id]=(G.seedlings[f.id]||0)+3;});
+  updateGardenCardUI();updateRedDots();saveGame(true);
+  toast('🐠 种鱼模式已解锁！马上打开教学','gold');
+  setTimeout(()=>openGardenMode(),700);
+}
+// 作弊：重看种鱼教学（把卡牌/引导都唤醒）
+function devReplayGardenTut(){
+  document.getElementById('devOverlay').classList.remove('active');
+  G.gardenUnlocked=true;G.gardenTutSeen=false;G.gardenTutPending=true;G.gardenTutStep=0;
+  updateGardenCardUI();updateRedDots();
+  openGardenTutorial(true);
 }
 function updateDevFrogLvTxt(){
   let el=document.getElementById('devFrogLvTxt');
