@@ -54,11 +54,46 @@ body{
 }
 #goalHud .gh-earn .left{color:#4FC3F7}
 #goalHud .gh-earn .prog{color:#9FE6A0}
-#goalHud .gh-bar{width:min(200px,42vw);height:6px;background:rgba(255,255,255,.14);border-radius:4px;overflow:hidden;margin-top:3px;box-shadow:inset 0 1px 3px rgba(0,0,0,.5)}
+#goalHud .gh-bar-wrap{position:relative;margin-top:4px;padding-top:14px}
+#goalHud .gh-bar{width:min(200px,42vw);height:6px;background:rgba(255,255,255,.14);border-radius:4px;overflow:hidden;box-shadow:inset 0 1px 3px rgba(0,0,0,.5)}
 #goalHud .gh-bar-fill{height:100%;background:linear-gradient(90deg,#4FC3F7,#FFD700 60%,#66BB6A);border-radius:4px;transition:width .35s ease}
-#goalHud .gh-progress-txt{font-size:clamp(11px,1.6vh,14px);font-weight:bold;color:rgba(255,255,255,.92);text-shadow:0 1px 2px rgba(0,0,0,.9)}
+#goalHud .gh-marks{position:absolute;left:0;right:0;top:0;height:14px;pointer-events:none}
+#goalHud .gh-mark{position:absolute;top:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center}
+#goalHud .gh-mark.end{transform:translateX(-100%)}
+#goalHud .gh-mark-label{font-size:9px;line-height:1;font-weight:bold;color:rgba(255,255,255,.42);white-space:nowrap;text-shadow:0 1px 2px rgba(0,0,0,.9);transition:color .3s,text-shadow .3s}
+#goalHud .gh-mark-tick{width:1px;height:5px;background:rgba(255,255,255,.32);margin-top:1px}
+#goalHud .gh-mark.reached .gh-mark-label{color:#FFD700;text-shadow:0 0 6px rgba(255,215,0,.7)}
+#goalHud .gh-mark.reached .gh-mark-tick{background:#FFD700;box-shadow:0 0 5px rgba(255,215,0,.7)}
+#goalHud .gh-progress-txt{font-size:clamp(11px,1.6vh,14px);font-weight:bold;color:rgba(255,255,255,.92);text-shadow:0 1px 2px rgba(0,0,0,.9);margin-top:2px}
 #goalHud .gh-progress-txt .left{color:#4FC3F7}
 @keyframes ghBlink{0%,100%{opacity:1}50%{opacity:.2}}
+
+/* ===== 闯关出竿次数 · 黑暗+高亮提示 ===== */
+.cast-chip{
+    display:inline-block;margin-top:4px;padding:3px 12px;border-radius:11px;
+    font-size:0.78em;font-weight:bold;letter-spacing:.5px;
+    color:#cfe8ff;background:rgba(0,0,0,.62);
+    border:1px solid rgba(120,170,220,.45);
+    box-shadow:inset 0 0 8px rgba(0,0,0,.6),0 1px 3px rgba(0,0,0,.5);
+    text-shadow:0 1px 2px rgba(0,0,0,.9);
+    transition:all .25s ease;
+}
+.cast-chip b{color:#FFD54F;font-size:1.05em}
+.cast-chip.warn{
+    color:#fff;border-color:#FF5252;
+    background:rgba(60,0,0,.7);
+    box-shadow:0 0 14px rgba(255,60,60,.7),inset 0 0 10px rgba(120,0,0,.6);
+    animation:castWarn 0.9s ease-in-out infinite;
+}
+.cast-chip.warn b{color:#FF5252}
+.cast-chip.danger{
+    color:#fff;border-color:#FF1744;
+    background:rgba(90,0,0,.82);
+    box-shadow:0 0 20px rgba(255,30,30,.9),inset 0 0 12px rgba(150,0,0,.7);
+    animation:castWarn 0.55s ease-in-out infinite;
+}
+.cast-chip.danger b{color:#FF8A80}
+@keyframes castWarn{0%,100%{filter:brightness(1)}50%{filter:brightness(1.55)}}
 
 /* 全局目标结算（100万达成 / 100天到期） */
 #goalOverlay{position:fixed;inset:0;z-index:130;display:none;align-items:center;justify-content:center;background:rgba(4,9,18,.74);backdrop-filter:blur(3px)}
@@ -505,17 +540,19 @@ body{
 @keyframes redDotPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.35);opacity:.72}}
 
 
-/* 关卡指示器 */
+/* 关卡指示器（下移到保底计数下方，避免重叠） */
 .level-indicator{
     position:absolute;
-    top:48px;left:50%;transform:translateX(-50%);
+    top:82px;left:50%;transform:translateX(-50%);
     display:none;flex-direction:column;align-items:center;
-    gap:2px;z-index:99;
+    gap:2px;z-index:98;
     background:rgba(0,0,0,0.55);
     padding:6px 20px;border-radius:12px;
     font-size:0.8em;text-shadow:0 0 6px rgba(0,0,0,0.5);
+    max-width:min(92vw,560px);text-align:center;line-height:1.35;
 }
-.level-indicator span{white-space:nowrap}
+.level-indicator span{white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.level-indicator #liDesc{white-space:normal;word-break:break-word;font-size:0.94em;opacity:0.92}
 
 /* 关卡通关弹窗 */
 .level-complete-overlay{
@@ -734,6 +771,7 @@ body{
 .mp-title-wrap{text-align:center;margin-bottom:40px}
 .mp-title{font-size:2.2em;font-weight:bold;color:#FFD700;text-shadow:0 0 30px rgba(255,215,0,0.4)}
 .mp-sub{font-size:1em;color:#aaa;margin-top:8px}
+.mp-paused{display:inline-block;margin-top:14px;padding:4px 16px;border-radius:20px;font-size:0.85em;color:#8fe;background:rgba(0,0,0,0.35);border:1px solid rgba(120,200,255,0.4);text-shadow:0 0 8px rgba(120,200,255,0.5)}
 .mp-cards{display:flex;gap:30px;flex-wrap:wrap;justify-content:center}
 .mp-card{width:240px;padding:30px 24px;border-radius:20px;text-align:center;cursor:pointer;transition:all 0.3s;border:2px solid transparent;background:rgba(255,255,255,0.04);color:#fff}
 .mp-card:hover{transform:translateY(-8px);background:rgba(255,255,255,0.08)}
@@ -773,14 +811,15 @@ body{
 /* ===== 种鱼模式界面 ===== */
 .garden-overlay{position:absolute;inset:0;z-index:340;display:none;align-items:center;justify-content:center;background:rgba(0,10,25,0.82);backdrop-filter:blur(3px)}
 /* ===== 种鱼模式教学 ===== */
+/* 种鱼教学：卡片统一放右上角，容器不挡画面/不挡操作（教学里要点鱼塘和鱼苗） */
 .gtut-overlay{
-    position:absolute;inset:0;z-index:620;display:none;align-items:center;justify-content:center;
-    background:rgba(2,10,22,0.88);backdrop-filter:blur(6px);padding:20px
+    position:absolute;inset:0;z-index:620;display:none;pointer-events:none;padding:0
 }
-.gtut-overlay.active{display:flex;animation:gtutFade 0.25s ease}
+.gtut-overlay.active{display:block;animation:gtutFade 0.25s ease}
 @keyframes gtutFade{from{opacity:0}to{opacity:1}}
 .gtut-card{
-    width:min(560px,94vw);max-height:90vh;overflow:auto;
+    position:fixed;top:96px;right:12px;pointer-events:auto;
+    width:min(330px,42vw);max-height:72vh;overflow:auto;
     background:linear-gradient(160deg,rgba(10,52,86,0.98),rgba(3,16,32,0.99));
     border:2px solid rgba(76,201,240,0.5);border-radius:20px;
     padding:26px 26px 20px;color:#e8f6ff;text-align:center;
@@ -1135,12 +1174,31 @@ body{
     box-shadow:0 0 14px rgba(220,50,30,0.2);
 }
 
+/* 常驻音乐按钮：左下角（小岛左下是水面、钓鱼底栏居中、教学卡在右上，均不冲突） */
+.music-btn{
+  position:fixed;left:16px;bottom:16px;z-index:9500;pointer-events:auto;
+  display:inline-flex;align-items:center;gap:6px;max-width:42vw;
+  background:rgba(8,18,34,0.85);border:2px solid rgba(255,200,100,0.5);border-radius:14px;
+  color:#FFE082;font-size:0.78em;font-weight:bold;padding:8px 12px;cursor:pointer;
+  text-shadow:0 1px 3px rgba(0,0,0,0.7);box-shadow:0 6px 20px rgba(0,0,0,0.45);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:all 0.15s;
+  font-family:inherit;
+}
+.music-btn:hover{background:rgba(255,200,100,0.18);transform:translateY(-2px);border-color:rgba(255,215,0,0.85)}
+.music-btn.muted{opacity:0.62}
+
 /* 新手教程：右上角悬浮面板（不遮挡 HUD 与底部按钮） */
 .tutorial-overlay{position:fixed;top:0;left:0;width:100%;height:100%;display:none;z-index:1100;pointer-events:none}
 .tutorial-overlay.active{display:block}
 .tutorial-overlay.tutorial-hover-demo{background:transparent}
 .tutorial-hint{margin-top:14px;padding:10px 16px;border-radius:12px;background:rgba(255,215,0,0.14);border:2px dashed rgba(255,215,0,0.65);color:#FFE082;font-size:0.92em;line-height:1.6;text-shadow:0 1px 3px rgba(0,0,0,0.6)}
 .gtut-hint{margin-top:12px;padding:9px 14px;border-radius:11px;background:rgba(255,215,0,0.14);border:2px dashed rgba(255,215,0,0.65);color:#FFE082;font-size:0.88em;line-height:1.55;text-shadow:0 1px 3px rgba(0,0,0,0.6)}
+/* 新手教程：高光提示（聚光灯）——全场变暗，只有提示区域明亮 */
+#tutSpotlight{position:fixed;z-index:1090;pointer-events:none;border-radius:14px;
+  box-shadow:0 0 0 9999px rgba(0,0,0,0.62),0 0 0 3px rgba(255,215,0,0.95),0 0 30px 8px rgba(255,215,0,0.8);
+  transition:all 0.25s ease;
+  animation:tutSpotPulse 1.15s ease-in-out infinite}
+@keyframes tutSpotPulse{0%,100%{box-shadow:0 0 0 9999px rgba(0,0,0,0.62),0 0 0 3px rgba(255,215,0,0.95),0 0 22px 5px rgba(255,215,0,0.6)}50%{box-shadow:0 0 0 9999px rgba(0,0,0,0.62),0 0 0 4px rgba(255,215,0,1),0 0 40px 12px rgba(255,215,0,0.95)}}
 
 /* ===== 关卡教学卡（半穿透：玩家实际操作后才消失）===== */
 .level-tut-overlay{position:fixed;top:0;left:0;width:100%;height:100%;z-index:880;display:none;align-items:flex-start;justify-content:center;background:linear-gradient(180deg,rgba(0,0,0,0.45) 0%,rgba(0,0,0,0.4) 55%,rgba(0,0,0,0) 72%);pointer-events:none;padding-top:7vh}
@@ -1183,6 +1241,29 @@ body{
 /* ===== 每天推进：倒计时红光闪烁 ===== */
 @keyframes dayFlashRed{0%{box-shadow:0 0 0 0 rgba(255,40,40,0)}28%{box-shadow:0 0 18px 5px rgba(255,45,45,0.9)}100%{box-shadow:0 0 0 0 rgba(255,40,40,0)}}
 .day-flash{animation:dayFlashRed 0.9s ease-out}
+
+/* ===== 模式专属提示（冒险=危险值 / 闯关=通关条件）===== */
+/* 模式提示：卡片统一放右上角，容器不挡画面也不挡点击（否则"抛一竿"根本点不了） */
+.mode-tip-overlay{position:fixed;inset:0;z-index:8800;display:none;pointer-events:none}
+.mode-tip-overlay.show{display:block}
+.mode-tip-card{position:fixed;top:96px;right:12px;pointer-events:auto;text-align:center;color:#fff;background:linear-gradient(135deg,rgba(15,30,50,0.97),rgba(8,16,30,0.97));border:2px solid rgba(255,200,100,0.55);border-radius:18px;padding:16px 18px;width:min(330px,42vw);max-height:72vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,0.55),0 0 30px rgba(255,180,50,0.22);animation:lcIn 0.3s ease-out}
+.mt-icon{font-size:2.6em;line-height:1;margin-bottom:6px;animation:rvBounce 0.8s ease-out}
+.mt-title{font-size:1.05em;font-weight:800;color:#FFD54F;margin-bottom:10px;text-shadow:0 0 10px rgba(255,200,80,0.4)}
+.mt-desc{font-size:0.82em;line-height:1.7;color:rgba(255,255,255,0.9);text-align:left;background:rgba(0,0,0,0.25);border-radius:12px;padding:12px 14px;margin-bottom:16px}
+.mt-desc b{color:#FFD54F}
+.mt-btns{display:flex;justify-content:center}
+
+/* 冒险教学：高亮「危险值」让玩家一眼看到 */
+.fh-danger.tut-danger-hl{
+  position:relative;z-index:15;
+  animation:fhDangerGlow 0.85s ease-in-out infinite;
+  border-radius:8px;
+}
+.fh-danger.tut-danger-hl .fh-danger-label{color:#FF5252;text-shadow:0 0 10px rgba(255,60,60,.9)}
+@keyframes fhDangerGlow{
+  0%,100%{box-shadow:0 0 4px rgba(255,60,60,.5);filter:brightness(1)}
+  50%{box-shadow:0 0 22px rgba(255,60,60,.95);filter:brightness(1.5)}
+}
 .tutorial-card{position:fixed;top:96px;right:12px;pointer-events:auto;text-align:center;color:#fff;background:linear-gradient(135deg,rgba(15,30,50,0.96),rgba(8,16,30,0.96));border:2px solid rgba(255,200,100,0.5);border-radius:18px;padding:16px 18px;width:min(330px,42vw);max-height:72vh;overflow-y:auto;animation:lcIn 0.35s ease-out;box-shadow:0 8px 40px rgba(0,0,0,0.55),0 0 30px rgba(255,180,50,0.22)}
 .tutorial-card::-webkit-scrollbar{width:6px}
 .tutorial-card::-webkit-scrollbar-thumb{background:rgba(255,200,100,0.35);border-radius:3px}
@@ -1382,6 +1463,13 @@ body{
 }
 @keyframes restPulse{0%,100%{box-shadow:0 4px 20px rgba(255,152,0,0.35)}50%{box-shadow:0 6px 32px rgba(255,152,0,0.7)}}
 .island-btn-rest:hover{transform:translateY(-2px);box-shadow:0 8px 38px rgba(255,152,0,0.6)}
+.island-btn-go{
+  background:linear-gradient(135deg,#26C6DA,#00838F);
+  color:#E0F7FA;
+  box-shadow:0 4px 20px rgba(38,198,218,0.4);
+}
+.island-btn-go:hover{transform:translateY(-2px);box-shadow:0 8px 38px rgba(38,198,218,0.7)}
+.island-hint{margin-top:10px;font-size:0.8em;color:rgba(255,255,255,0.72);text-align:center;text-shadow:0 1px 2px rgba(0,0,0,0.8)}
 .island-btn-sell{
   padding:10px 24px;
   background:linear-gradient(135deg,#f39c12,#d35400);
@@ -1605,8 +1693,9 @@ body{
     <!-- 模式选择页 -->
     <div class="mode-pick" id="modePick">
         <div class="mp-title-wrap">
-            <div class="mp-title">🎣 下一条鱼会更大</div>
-            <div class="mp-sub">Next Bigger Catch</div>
+            <div class="mp-title">⛵ 出海 · 选择模式</div>
+            <div class="mp-sub">Next Bigger Catch · 想去哪片海？</div>
+            <div class="mp-paused">💡 想回小岛？随时点左上角 🏠 返回</div>
         </div>
         <div class="mp-lore">
             <p class="lore-line">在遥远的海域，有一位<span class="hl">独自生活在孤岛</span>上的少年</p>
@@ -1638,15 +1727,10 @@ body{
                 <div class="mp-card-desc">自由海钓 · 收益风险双高</div>
                 <div class="mp-card-features"><span>⚠</span> 无保底<br><span>⚠</span> 每日结算<br><span>⚠</span> 危险值系统<br><span>⚠</span> 天灾事件</div>
             </div>
-            <div class="mp-card mp-mystery mp-garden" id="mpGardenCard" onclick="openGardenMode()">
-                <span class="mp-icon">❓</span>
-                <div class="mp-card-title">神秘模式</div>
-                <div class="mp-card-desc" id="mpGardenDesc">成功钓鱼 3 次后解锁</div>
-                <div class="mp-card-features" id="mpGardenFeatures"><span>🔒</span> <span id="mpGardenProg">进度 0 / 3</span></div>
-            </div>
         </div>
         <div class="mp-frog-status">🐸 <span id="mpFrogLv">青蛙 Lv.1</span> · <span id="mpFrogRate">成功率 60%</span></div>
-        <div style="margin-top:15px;display:flex;gap:10px;justify-content:center">
+        <div style="margin-top:15px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+            <button class="gacha-btn btn-sell" onclick="returnToIsland()" style="font-size:0.8em!important;padding:6px 20px!important">🏠 返回小岛</button>
             <button class="gacha-btn btn-sell" onclick="saveGame()" style="font-size:0.8em!important;padding:6px 20px!important">💾 存档</button>
             <button class="gacha-btn btn-sell" onclick="openDevMode()" style="font-size:0.8em!important;padding:6px 20px!important;border-color:rgba(231,76,60,0.5)!important">🔧 作弊模式</button>
         </div>
@@ -1660,7 +1744,7 @@ body{
                     <div class="ls-title">🗺️ 选择关卡</div>
                     <div class="ls-sub" id="lsProgressTxt">已通关 0 / 50</div>
                 </div>
-                <button class="ls-back" onclick="closeLevelSelect()">✖ 返回主菜单</button>
+                <button class="ls-back" onclick="closeLevelSelect()">✖ 返回小岛</button>
             </div>
             <div class="ls-grid" id="lsGrid"></div>
             <div class="ls-foot">💡 绿色 = 已通关可重玩 · 金色高亮 = 当前进度 · 🔒 = 未解锁</div>
@@ -1670,7 +1754,7 @@ body{
     <!-- 游戏顶栏 (钓鱼模式 - 统一HUD) -->
     <div class="game-topbar hidden" id="gameUI">
         <div class="gtb-left">
-            <button class="gtb-btn-back" id="menuBackBtn" onclick="exitToMenu()">🏠</button>
+            <button class="gtb-btn-back" id="menuBackBtn" onclick="exitToMenu()" title="返回小岛">🏠</button>
             <span class="gtb-title" id="gtbModeTitle">🎣</span>
             <span class="gtb-clock" id="globalClock">🌅 6:00 AM</span>
             <button class="js-time-speed" id="timeSpeedBtn" onclick="cycleTimeScale()" title="时间流速（点击切换 1 / 2 / 4 倍）">⏩ ×1</button>
@@ -1696,7 +1780,10 @@ body{
     <div id="goalHud">
         <div class="gh-day" id="ghDay">⏳ 剩余 100 / 100 天</div>
         <div class="gh-earn">💰 <span class="prog" id="ghEarned">0</span> / 1,000,000</div>
-        <div class="gh-bar"><div class="gh-bar-fill" id="ghBar" style="width:0%"></div></div>
+        <div class="gh-bar-wrap">
+            <div class="gh-marks" id="ghMarks"></div>
+            <div class="gh-bar"><div class="gh-bar-fill" id="ghBar" style="width:0%"></div></div>
+        </div>
         <div class="gh-progress-txt" id="ghLeft">还差 <span class="left">1,000,000</span> 💰 达成 100 万</div>
     </div>
 
@@ -1714,14 +1801,14 @@ body{
         <span id="liName" style="color:#fff;">初出茅庐</span>
         <span id="liDesc" style="color:#aaa;font-size:0.7em;"></span>
         <span style="color:#aaa;font-size:0.8em;">目标: <span id="levelProgress" style="color:#4FC3F7;font-weight:bold;">0/3</span></span>
-        <span style="color:#888;font-size:0.75em;">剩余: <span id="levelCasts" style="color:#FF9800;">0/8</span></span>
+        <div class="cast-chip" id="castChip">🎣 出竿 <b id="levelCasts">0/8</b></div>
     </div>
 
     <!-- 冒险模式统一HUD（天数/危险/收益一体化） -->
     <div class="fishing-hud" id="fishingHud">
         <div class="fh-bar">
             <div class="fh-cell fh-day-cell" id="fhDay">☀️ 第 1/100 天</div>
-            <div class="fh-danger">
+            <div class="fh-danger" id="fhDanger">
                 <span class="fh-danger-label">⚠</span>
                 <div class="fh-danger-bar-wrap"><div class="fh-danger-bar-fill" id="fhDangerBar" style="width:0%"></div></div>
                 <span class="fh-danger-pct" id="fhDangerPct">0%</span>
@@ -1964,7 +2051,7 @@ body{
             <div class="adv-result-detail" id="advResultDetail"></div>
             <div class="adv-result-btns">
                 <button class="gacha-btn btn-single" onclick="advRestart()">🔄 再试一次</button>
-                <button class="gacha-btn btn-sell" onclick="advQuit()">🏠 返回主菜单</button>
+                <button class="gacha-btn btn-sell" onclick="advQuit()">🏠 返回小岛</button>
             </div>
         </div>
     </div>
@@ -2008,7 +2095,7 @@ body{
             <div class="pause-subtitle">—— 休息片刻 ——</div>
             <div class="pause-btn-list">
                 <button class="pause-btn primary" onclick="togglePause()">▶ 继续游戏</button>
-                <button class="pause-btn danger" onclick="exitToMenu()">🚪 返回主菜单</button>
+                <button class="pause-btn danger" onclick="exitToMenu()">🚪 返回小岛</button>
             </div>
         </div>
     </div>
@@ -2024,6 +2111,18 @@ body{
             <div class="tutorial-btns">
                 <button class="gacha-btn btn-sell" onclick="skipTutorial()" style="font-size:0.8em!important;padding:8px 16px!important">跳过教程</button>
                 <button class="gacha-btn btn-single" id="tutorialNextBtn" onclick="nextTutorial()" style="font-size:0.9em!important">下一步 ➡️</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 模式专属提示（冒险=危险值 / 闯关=通关条件）：首次进入该模式时弹一次 -->
+    <div class="mode-tip-overlay" id="modeTipOverlay">
+        <div class="mode-tip-card">
+            <div class="mt-icon" id="mtIcon">⚠️</div>
+            <div class="mt-title" id="mtTitle"></div>
+            <div class="mt-desc" id="mtDesc"></div>
+            <div class="mt-btns">
+                <button class="gacha-btn btn-single" onclick="closeModeTip()">知道啦 ✅</button>
             </div>
         </div>
     </div>
@@ -2088,7 +2187,7 @@ body{
                 <span class="island-act-label">种 菜</span>
                 <span class="island-act-badge" id="islandPlantBadge" style="background:rgba(34,197,94,0.7)">0</span>
             </button>
-            <button class="island-act-btn" id="islandActFishPlant" onclick="switchIslandTab('fishplant')">
+            <button class="island-act-btn" id="islandActFishPlant" onclick="openIslandGarden()">
                 <span class="island-act-icon">🐠</span>
                 <span class="island-act-label">种 鱼</span>
                 <span class="island-act-lock" id="islandFishLock">🔒</span>
@@ -2117,7 +2216,9 @@ body{
         
         <!-- 底部操作栏 -->
         <div class="island-bottom-bar">
-            <button class="island-main-btn island-btn-rest" onclick="restAndNextDay()">😴 休息 · 进入下一天</button>
+            <button class="island-main-btn island-btn-rest" id="islandRestBtn" onclick="restAndNextDay()">😴 休息 · 进入下一天</button>
+            <button class="island-main-btn island-btn-go" id="islandGoFish" onclick="goFishingFromIsland()">🎣 出海钓鱼（推荐先玩🎓新手教学）</button>
+            <div class="island-hint">💡 在小岛可以自由种菜 / 种鱼 / 出海钓鱼，也可以什么都不干～</div>
         </div>
     </div>
 
@@ -2131,7 +2232,7 @@ body{
                     <button class="js-time-speed" id="timeSpeedBtn2" onclick="cycleTimeScale()" title="时间流速（点击切换 1 / 2 / 4 倍）">⏩ ×1</button>
                     <span class="garden-coins" id="gardenCoins">0 💰</span>
                     <button class="garden-guide-btn" id="gardenGuideBtn" onclick="openGardenTutorial(true)">❓ 玩法教学</button>
-                    <button class="garden-back" id="gardenBackBtn" onclick="closeGardenMode()">✖ 返回主菜单</button>
+                    <button class="garden-back" id="gardenBackBtn" onclick="closeGardenMode()">✖ 返回小岛</button>
                 </div>
             </div>
             <div class="garden-sub">把钓到的鱼苗种进鱼塘，越贵的鱼成熟越慢（时间随全局时钟流动）。成熟后点击鱼塘即可收获金币。</div>
@@ -2282,6 +2383,9 @@ body{
         </div>
     </div>
 </div>
+<!-- 常驻音乐按钮（左下角，所有模式都在，不挡画面） + 原创背景音乐 -->
+<audio id="bgmFileAudio" loop preload="auto"></audio>
+<button id="musicBtn" class="music-btn" onclick="cycleMusic()" title="点击切换背景音乐">🎵 遐夏（原创纯手搓）</button>
 <script src="game.js"></script>
 </body>
 </html>
