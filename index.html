@@ -1135,12 +1135,10 @@ body{
     box-shadow:0 0 14px rgba(220,50,30,0.2);
 }
 
-/* 新手教程覆盖层 */
-.tutorial-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.82);display:none;justify-content:center;align-items:center;z-index:1100;flex-direction:column}
-.tutorial-overlay.active{display:flex}
-/* 演示模式：半透明可穿透，让玩家实际操作钓点 */
-.tutorial-overlay.tutorial-hover-demo{background:rgba(0,0,0,0.28);pointer-events:none}
-.tutorial-overlay.tutorial-hover-demo .tutorial-card{pointer-events:auto}
+/* 新手教程：右上角悬浮面板（不遮挡 HUD 与底部按钮） */
+.tutorial-overlay{position:fixed;top:0;left:0;width:100%;height:100%;display:none;z-index:1100;pointer-events:none}
+.tutorial-overlay.active{display:block}
+.tutorial-overlay.tutorial-hover-demo{background:transparent}
 .tutorial-hint{margin-top:14px;padding:10px 16px;border-radius:12px;background:rgba(255,215,0,0.14);border:2px dashed rgba(255,215,0,0.65);color:#FFE082;font-size:0.92em;line-height:1.6;text-shadow:0 1px 3px rgba(0,0,0,0.6)}
 .gtut-hint{margin-top:12px;padding:9px 14px;border-radius:11px;background:rgba(255,215,0,0.14);border:2px dashed rgba(255,215,0,0.65);color:#FFE082;font-size:0.88em;line-height:1.55;text-shadow:0 1px 3px rgba(0,0,0,0.6)}
 
@@ -1157,15 +1155,46 @@ body{
 .lt-skip{background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.25);color:#cfe3ef;border-radius:9px;padding:6px 12px;font-size:0.75em;cursor:pointer;white-space:nowrap}
 .lt-skip:hover{background:rgba(255,255,255,0.18)}
 .lt-highlight{animation:redDotPulse 1.3s ease-in-out infinite!important;box-shadow:0 0 0 2px rgba(255,215,0,0.85)!important}
-.tutorial-card{text-align:center;color:#fff;background:linear-gradient(135deg,rgba(15,30,50,0.98),rgba(8,16,30,0.98));border:2px solid rgba(255,200,100,0.5);border-radius:22px;padding:35px 40px;max-width:450px;width:90%;animation:lcIn 0.4s ease-out;box-shadow:0 0 60px rgba(255,180,50,0.25)}
-.tutorial-icon{font-size:3.5em;display:block;margin-bottom:8px;animation:rvBounce 0.8s ease-out}
-.tutorial-title{font-size:1.3em;font-weight:bold;color:#FFD700;margin-bottom:12px}
-.tutorial-desc{font-size:0.9em;color:#ccc;line-height:1.7;margin-bottom:18px;min-height:40px}
-.tutorial-desc .tt-chip{display:inline-block;padding:2px 10px;margin:3px 2px;border-radius:12px;color:#fff;font-size:0.85em;border:1px solid rgba(255,255,255,0.35);box-shadow:0 0 8px rgba(255,255,255,0.15);text-shadow:0 1px 2px rgba(0,0,0,0.5)}
-.tutorial-step-indicator{display:flex;gap:6px;justify-content:center;margin-bottom:12px}
-.tutorial-dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,0.25);transition:all 0.3s}
-.tutorial-dot.active{background:#FFD700;box-shadow:0 0 8px rgba(255,215,0,0.6);width:24px;border-radius:4px}
-.tutorial-btns{display:flex;gap:12px;justify-content:center}
+
+/* ===== 里程碑达成奖励弹窗 ===== */
+.milestone-overlay{position:fixed;inset:0;z-index:1250;display:none;align-items:center;justify-content:center;background:rgba(4,9,18,0.74);backdrop-filter:blur(3px)}
+.milestone-overlay.active{display:flex}
+.milestone-card{width:min(420px,92vw);text-align:center;color:#fff;background:linear-gradient(135deg,rgba(40,28,8,0.98),rgba(20,14,4,0.98));border:2px solid rgba(255,200,100,0.65);border-radius:20px;padding:26px 28px;box-shadow:0 0 60px rgba(255,180,50,0.35);animation:lcIn 0.4s ease-out}
+.ms-badge{font-size:3.4em;filter:drop-shadow(0 0 14px rgba(255,200,80,0.7));margin-bottom:4px}
+.ms-title{font-size:1.25em;font-weight:bold;color:#FFD700;margin-bottom:6px}
+.ms-sub{font-size:0.82em;color:#d8c9a8;margin-bottom:14px}
+.ms-rewards{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:18px}
+.ms-r{background:rgba(255,215,0,0.12);border:1px solid rgba(255,215,0,0.4);border-radius:10px;padding:6px 12px;font-size:0.88em;color:#FFE082}
+.ms-r-rainbow{background:linear-gradient(90deg,rgba(255,0,150,0.18),rgba(120,80,255,0.18));border-color:rgba(255,120,200,0.6);color:#FFB6E6}
+
+/* ===== 开场剧情 · 女神黑影（圆形带问号）===== */
+.goddess-shadow{position:absolute;top:4%;left:50%;transform:translateX(-50%) scale(.7);width:130px;height:130px;border-radius:50%;background:radial-gradient(circle at 50% 38%,#34343f 0%,#15151c 60%,#050507 100%);box-shadow:0 0 45px rgba(150,90,255,0.55),inset 0 0 35px rgba(0,0,0,0.85);display:none;align-items:center;justify-content:center;font-size:3.6em;font-weight:bold;color:#c4aaff;text-shadow:0 0 14px rgba(150,90,255,0.9);opacity:0;transition:opacity .5s ease,transform .5s ease}
+.goddess-shadow.show{display:flex;opacity:1;transform:translateX(-50%) scale(1)}
+.intro-avatar.is-goddess{background:#101019;color:#c4aaff;border:2px solid rgba(150,90,255,0.55);box-shadow:0 0 20px rgba(150,90,255,0.6);font-size:1.7em}
+
+/* ===== 新手教学完成结算 ===== */
+.tutorial-done-overlay{position:fixed;inset:0;z-index:1300;display:none;align-items:center;justify-content:center;background:rgba(4,9,18,0.78);backdrop-filter:blur(3px)}
+.tutorial-done-overlay.active{display:flex}
+.tutorial-done-card{width:min(380px,92vw);text-align:center;color:#fff;background:linear-gradient(135deg,rgba(15,30,50,0.98),rgba(8,16,30,0.98));border:2px solid rgba(255,200,100,0.6);border-radius:20px;padding:28px 26px;box-shadow:0 0 50px rgba(255,180,50,0.3);animation:lcIn 0.4s ease-out}
+.td-badge{font-size:3.4em;margin-bottom:4px}
+.td-title{font-size:1.3em;font-weight:bold;color:#FFD700;margin-bottom:10px}
+.td-text{font-size:0.9em;color:#cfd8e6;line-height:1.7;margin-bottom:18px}
+
+/* ===== 每天推进：倒计时红光闪烁 ===== */
+@keyframes dayFlashRed{0%{box-shadow:0 0 0 0 rgba(255,40,40,0)}28%{box-shadow:0 0 18px 5px rgba(255,45,45,0.9)}100%{box-shadow:0 0 0 0 rgba(255,40,40,0)}}
+.day-flash{animation:dayFlashRed 0.9s ease-out}
+.tutorial-card{position:fixed;top:96px;right:12px;pointer-events:auto;text-align:center;color:#fff;background:linear-gradient(135deg,rgba(15,30,50,0.96),rgba(8,16,30,0.96));border:2px solid rgba(255,200,100,0.5);border-radius:18px;padding:16px 18px;width:min(330px,42vw);max-height:72vh;overflow-y:auto;animation:lcIn 0.35s ease-out;box-shadow:0 8px 40px rgba(0,0,0,0.55),0 0 30px rgba(255,180,50,0.22)}
+.tutorial-card::-webkit-scrollbar{width:6px}
+.tutorial-card::-webkit-scrollbar-thumb{background:rgba(255,200,100,0.35);border-radius:3px}
+.tutorial-icon{font-size:2.2em;display:block;margin-bottom:4px;animation:rvBounce 0.8s ease-out}
+.tutorial-title{font-size:1.05em;font-weight:bold;color:#FFD700;margin-bottom:8px;line-height:1.35}
+.tutorial-desc{font-size:0.82em;color:#ccc;line-height:1.6;margin-bottom:12px;text-align:left}
+.tutorial-desc .tt-chip{display:inline-block;padding:2px 9px;margin:3px 2px;border-radius:12px;color:#fff;font-size:0.82em;border:1px solid rgba(255,255,255,0.35);box-shadow:0 0 8px rgba(255,255,255,0.15);text-shadow:0 1px 2px rgba(0,0,0,0.5)}
+.tutorial-step-indicator{display:flex;gap:5px;justify-content:center;flex-wrap:wrap;margin-bottom:10px}
+.tutorial-dot{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,0.25);transition:all 0.3s}
+.tutorial-dot.active{background:#FFD700;box-shadow:0 0 8px rgba(255,215,0,0.6);width:20px;border-radius:4px}
+.tutorial-btns{display:flex;gap:10px;justify-content:center}
+.tutorial-btns .gacha-btn{font-size:0.78em!important;padding:8px 14px!important}
 
 /* 岛屿休整覆盖层 - 全透明让Canvas透出 */
 .island-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:transparent;display:none;z-index:600;pointer-events:none}
@@ -1591,6 +1620,12 @@ body{
             <p class="lore-line" style="font-weight:bold;color:#FFD700">轰轰烈烈的大钓鱼时代，就此开幕 🎣</p>
         </div>
         <div class="mp-cards">
+            <div class="mp-card mp-newbie" onclick="enterTutorialReview()">
+                <span class="mp-icon">🎓</span>
+                <div class="mp-card-title">新手教学</div>
+                <div class="mp-card-desc">跟着提示学钓鱼基础</div>
+                <div class="mp-card-features"><span>🎣</span> 抛竿/钓点<br><span>🐸</span> 青蛙进化<br><span>🛡️</span> 道具使用<br><span>📖</span> 随时复习</div>
+            </div>
             <div class="mp-card mp-level" onclick="openLevelSelect()">
                 <span class="mp-icon">🗺️</span>
                 <div class="mp-card-title">闯关模式</div>
@@ -1993,6 +2028,27 @@ body{
         </div>
     </div>
 
+    <!-- 里程碑达成奖励弹窗 -->
+    <div class="milestone-overlay" id="milestoneOverlay">
+        <div class="milestone-card">
+            <div class="ms-badge">🏆</div>
+            <div class="ms-title" id="msTitle">里程碑达成</div>
+            <div class="ms-sub">达成 100 万目标进度，领取阶段奖励！</div>
+            <div class="ms-rewards" id="msRewards"></div>
+            <button class="gacha-btn btn-single" onclick="closeMilestone()">领取奖励 🎁</button>
+        </div>
+    </div>
+
+    <!-- 新手教学完成结算 -->
+    <div class="tutorial-done-overlay" id="tutorialDoneOverlay">
+        <div class="tutorial-done-card">
+            <div class="td-badge">🎓</div>
+            <div class="td-title">新手教学完成！</div>
+            <div class="td-text">你已掌握钓鱼的基础操作，现在可以自由探索啦！<br>返回主界面，选择你喜欢的模式开始冒险吧～</div>
+            <button class="gacha-btn btn-single" onclick="closeTutorialDone();exitToMenu()">🏠 返回主界面</button>
+        </div>
+    </div>
+
     <!-- 关卡教学覆盖层（道具课 / 区域课）：半穿透，玩家实际操作后消失 -->
     <div class="level-tut-overlay" id="levelTutOverlay">
         <div class="level-tut-card">
@@ -2171,6 +2227,7 @@ body{
     <!-- 开场剧情（序章） -->
     <div class="intro-overlay" id="introOverlay">
         <div class="intro-scene">
+            <div class="goddess-shadow" id="goddessShadow">?</div>
             <div class="intro-avatar" id="introAvatar">🌊</div>
             <div class="intro-speaker" id="introSpeaker">旁白</div>
             <div class="intro-text" id="introText"></div>
