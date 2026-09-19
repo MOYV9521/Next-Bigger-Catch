@@ -531,7 +531,7 @@ function initAudio(){
 }
 // ===== 背景音乐曲目：原创《遐夏》为默认，循环播放；可自由切换 =====
 const MUSIC_TRACKS=[
-  {name:'遐夏（原创纯手搓）',file:'bgm-xiaxia.wav'},
+  {name:'遐夏（原创纯手搓）',file:'bgm-xiaxia.mp3'},
   {name:'悠闲假日（纯AI）',file:null},
   {name:'关闭音乐',file:null,off:true}
 ];
