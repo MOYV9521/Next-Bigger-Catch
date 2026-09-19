@@ -1132,8 +1132,8 @@ function castAtSpot(spot){
   // 设置钓点坐标（舌头/鱼钩直接伸到钓点真实位置，可深达水下）
   castX=spot.x; castY=spot.y;
   effectInWater=(spot.zone==='water');
-  // 水中鱼：特效锚点在水面（鱼跃出水面）；云/山/太阳鱼：特效直接落在鱼的真实位置
-  castSurfaceY=effectInWater?H*WL:spot.y;
+  // 特效统一锚定在「钓到鱼的真实位置(中心)」spot.y；水中鱼不再飘到水面
+  castSurfaceY=castY;
   clickTarget_d=spot;
   spot.clicked=true;
   tutComplete('cast');
@@ -5017,10 +5017,32 @@ function islandFishPos(i,t){
   let bandTop=H*0.72, bandBot=H*0.93;
   let n=Math.max(1,GARDEN_PLOTS);
   let laneH=(bandBot-bandTop)/n;
-  let y=bandTop+laneH*(i+0.5)+Math.sin(t*1.1+i*1.7)*laneH*0.26;
+  let p=G.gardenPlots[i];
+  let f=p?findFishById(p.fishId):null;
+  // 行为习性：大鱼慢、小鱼快（用最大体型 w[1] 推导速度系数）
+  let speedF=1;
+  if(f&&f.w){let maxW=f.w[1]||60;speedF=Math.max(0.45,Math.min(2.2,64/maxW));}
+  let seed=(f&&f.w)?f.w[0]:(i*37);
+  let phase=i*1.7+seed*0.013;
+  // 每条鱼有独立活动中心与游动幅度，避免整齐划一
+  let cx0=W*(0.20+0.60*((i*0.41+0.13)%1));
+  let amp=W*(0.07+0.10*((i*0.27+0.07)%1));
+  let swimSpd=0.18+0.22*speedF;
   let dir=(i%2===0)?1:-1;
-  let x=W*0.5+dir*Math.sin(t*(0.32+(i%3)*0.07)+i*1.3)*W*0.33;
-  return {x:x,y:y,dir:dir,size:Math.max(24,Math.min(46,laneH*0.9))};
+  let tri=Math.sin(t*swimSpd*dir+phase);
+  let x=cx0+tri*amp;
+  // 自由起伏：两条不同频率正弦叠加，模拟自然上下浮动
+  let vertSpd=0.5+0.7*speedF;
+  let y=bandTop+laneH*(i+0.5)
+      +Math.sin(t*vertSpd+phase*1.7)*laneH*0.20
+      +Math.sin(t*vertSpd*0.47+phase)*laneH*0.10;
+  // 当前横向速度方向（用于翻转朝向）
+  let vx=Math.cos(t*swimSpd*dir+phase)*swimSpd*dir;
+  let fdir=vx>=0?1:-1;
+  let size=Math.max(22,Math.min(46,laneH*0.92));
+  // 自由摆动（摆尾）：随游动轻微旋转 + 上下微摆
+  let tail=Math.sin(t*vertSpd*2.2+phase)*0.12+Math.sin(t*swimSpd*3*dir+phase)*0.05;
+  return {x:x,y:y,dir:fdir,size:size,tail:tail};
 }
 function drawIslandPondFish(){
   if(!G.gardenPlots||!G.gardenPlots.length)return;
@@ -5036,6 +5058,7 @@ function drawIslandPondFish(){
     cx.textAlign='center';cx.textBaseline='middle';
     cx.translate(pos.x,pos.y);
     if(pos.dir<0)cx.scale(-1,1);
+    cx.rotate(pos.tail||0); // 自由摆动（摆尾）
     cx.fillText(f.e||'🐟',0,0);
     cx.restore();
     if(ready){
